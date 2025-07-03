@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { View, Text, Modal, TextInput, TouchableOpacity, StyleSheet, FlatList, KeyboardAvoidingView, Platform, SafeAreaView, Animated, Dimensions, findNodeHandle, ScrollView, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,10 +15,10 @@ const DATE_OPTIONS = [
 ];
 
 export const PRIORITY_COLORS = {
-  None: { bg: '#f4f4f4', color: '#666', border: '#e0e0e0' },
-  Low: { bg: '#e8f5e9', color: '#2e7d32', border: '#c8e6c9' },
-  Medium: { bg: '#fff8e1', color: '#b68f00', border: '#ffe082' },
-  High: { bg: '#ffebee', color: '#c62828', border: '#ffcdd2' },
+  None: { bg: '#F2F2F7', color: '#C7C7CC', border: '#E5E5EA' }, // system gray
+  Low: { bg: '#E9F8EF', color: '#34C759', border: '#B7F5D8' }, // system green
+  Medium: { bg: '#FFF6E5', color: '#FF9500', border: '#FFE5B2' }, // system orange
+  High: { bg: '#FFE5E7', color: '#FF3B30', border: '#FFD1D4' }, // system red
 };
 
 const DUE_ACTIVE = { bg: '#3b82f6', color: '#fff', border: '#3b82f6' };
@@ -29,7 +29,7 @@ interface Subtask {
   completed: boolean;
 }
 
-interface TaskForm {
+export interface TaskForm {
   id?: string;
   text: string;
   note: string;
@@ -282,6 +282,39 @@ const CATEGORY_COLORS = {
   default:  { bg: '#f4f4f4', color: '#666', border: '#e0e0e0' },
 };
 
+export const APPLE_COLORS = {
+  light: {
+    primary: '#007AFF', // iOS system blue
+    background: '#FFFFFF',
+    card: '#F2F2F7',
+    text: '#1C1C1E',
+    textSecondary: 'rgba(60,60,67,0.6)',
+    textTertiary: 'rgba(60,60,67,0.3)',
+    border: '#E5E5EA',
+    todayBorder: '#007AFF',
+    selectedDay: '#007AFF',
+    selectedDayText: '#FFFFFF',
+    inactiveDay: 'rgba(60,60,67,0.3)',
+    fab: '#007AFF',
+    fabIcon: '#FFFFFF'
+  },
+  dark: {
+    primary: '#0A84FF', // iOS system blue (dark)
+    background: '#1C1C1E',
+    card: '#2C2C2E',
+    text: '#FFFFFF',
+    textSecondary: 'rgba(235,235,245,0.6)',
+    textTertiary: 'rgba(235,235,245,0.3)',
+    border: '#3A3A3C',
+    todayBorder: '#0A84FF',
+    selectedDay: '#0A84FF',
+    selectedDayText: '#FFFFFF',
+    inactiveDay: 'rgba(235,235,245,0.3)',
+    fab: '#0A84FF',
+    fabIcon: '#FFFFFF'
+  },
+};
+
 export default function AddEditTaskModal({ visible, onClose, onSave, editingTask, onCustomDueDate, onDelete }: {
   visible: boolean;
   onClose: () => void;
@@ -340,13 +373,27 @@ export default function AddEditTaskModal({ visible, onClose, onSave, editingTask
       setNote(editingTask.note || '');
       setPriority(editingTask.priority || 'None');
       setDueType(editingTask.dueType || 'today');
-      setDueDate(editingTask.dueDate);
+      let parsedDueDate = editingTask.dueDate;
+      if (parsedDueDate && /^\d{4}-\d{2}-\d{2}$/.test(parsedDueDate)) {
+        const [year, month, day] = parsedDueDate.split('-').map(Number);
+        parsedDueDate = new Date(year, month - 1, day).toISOString();
+      }
+      if (!parsedDueDate || isNaN(new Date(parsedDueDate).getTime())) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        parsedDueDate = today.toISOString();
+      }
+      setDueDate(parsedDueDate);
       setSubtasks(editingTask.subtasks || []);
       setShowSmartSuggestions(false);
       setShowSubtasks((editingTask.subtasks && editingTask.subtasks.length > 0) ? true : false);
       setShowNotes(!!editingTask.note && editingTask.note.trim().length > 0);
     } else {
-      setText(''); setNote(''); setPriority('None'); setDueType('today'); setDueDate(undefined); setSubtasks([]);
+      setText(''); setNote(''); setPriority('None'); setDueType('today');
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      setDueDate(today.toISOString());
+      setSubtasks([]);
       setShowSmartSuggestions(false);
       setShowSubtasks(false);
       setShowNotes(false);
@@ -722,7 +769,7 @@ export default function AddEditTaskModal({ visible, onClose, onSave, editingTask
   }
 
   return (
-    <Modal visible={visible} animationType="slide" transparent>
+    <Modal visible={visible} animationType="none" transparent>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalMinimalist}>
         <View style={[styles.modalCard, { backgroundColor: isDark ? '#23232a' : '#fff' }]}> 
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -737,6 +784,7 @@ export default function AddEditTaskModal({ visible, onClose, onSave, editingTask
             placeholderTextColor={isDark ? '#aaa' : '#64748b'}
             returnKeyType="done"
             onSubmitEditing={handleSave}
+            keyboardAppearance={isDark ? 'dark' : 'light'}
           />
           
           {/* Smart Suggestions Panel */}
@@ -830,7 +878,7 @@ export default function AddEditTaskModal({ visible, onClose, onSave, editingTask
                               <TouchableOpacity
                                 onPress={() => {
                                   if (alreadyAdded && addedSubtask) {
-                                    toggleSubtask(addedSubtask.id);
+                                    removeSubtask(addedSubtask.id);
                                   } else {
                                     addSingleSubtask(subtaskText);
                                   }
@@ -987,7 +1035,7 @@ export default function AddEditTaskModal({ visible, onClose, onSave, editingTask
               <FlatList
                 data={subtasks}
                 keyExtractor={item => item.id}
-                renderItem={({ item }) => (
+                renderItem={({ item }: { item: Subtask }) => (
                   <Swipeable
                     renderRightActions={(progress, dragX) => renderSubtaskRightActions(progress, dragX, () => removeSubtask(item.id))}
                     overshootRight={false}
@@ -1026,7 +1074,6 @@ export default function AddEditTaskModal({ visible, onClose, onSave, editingTask
                     </View>
                   </Swipeable>
                 )}
-                ListEmptyComponent={null}
               />
               <TouchableOpacity onPress={addSubtask} style={[styles.addSubtaskBtn, { backgroundColor: isDark ? '#23232a' : '#fafbfc', borderColor: isDark ? '#333' : '#ccc', flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }]}>
                 <FontAwesome5 name="plus" size={22} color={isDark ? '#fff' : '#3b82f6'} style={{ marginRight: 6 }} />

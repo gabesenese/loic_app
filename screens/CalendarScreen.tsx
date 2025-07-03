@@ -1,15 +1,41 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, SafeAreaView, ScrollView, Animated } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, TouchableWithoutFeedback, SafeAreaView, FlatList, Dimensions, Platform } from 'react-native';
+import type { ListRenderItemInfo } from 'react-native';
 import { useTheme } from '../ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
-import { FontAwesome5 } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { PRIORITY_COLORS } from '../components/AddEditTaskModal';
+import { APPLE_COLORS, PRIORITY_COLORS } from '../components/AddEditTaskModal';
+import { TaskForm } from '../components/AddEditTaskModal';
 import AddEditTaskModal from '../components/AddEditTaskModal';
-import { Swipeable } from 'react-native-gesture-handler';
-import { BlurView } from 'expo-blur';
+import * as Haptics from 'expo-haptics';
+import { Profiler } from 'react';
+import type { ProfilerOnRenderCallback } from 'react';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, runOnJS } from 'react-native-reanimated';
+import { Animated as RNAnimated } from 'react-native';
 
-const STORAGE_KEY = 'TODO_TASKS';
+// Memoized event list component
+interface MemoizedEventListProps {
+  tasks: Task[];
+  keyExtractor: (item: Task) => string;
+  renderEventCard: ({ item }: { item: Task }) => React.ReactElement;
+  ItemSeparator: () => React.ReactElement;
+  ListEmptyComponent: () => React.ReactElement;
+}
+
+const MemoizedEventList = React.memo(({ tasks, keyExtractor, renderEventCard, ItemSeparator, ListEmptyComponent }: MemoizedEventListProps) => (
+  <FlatList
+    data={tasks}
+    keyExtractor={keyExtractor}
+    renderItem={renderEventCard}
+    ItemSeparatorComponent={ItemSeparator}
+    ListEmptyComponent={ListEmptyComponent}
+    initialNumToRender={5}
+    maxToRenderPerBatch={5}
+    windowSize={3}
+    removeClippedSubviews={true}
+    style={{ maxHeight: 220 }}
+  />
+));
 
 interface Task {
   id: string;
@@ -24,622 +50,917 @@ interface Task {
   archived: boolean;
 }
 
-function getDaysInMonth(year: number, month: number) {
+const STORAGE_KEY = 'TODO_TASKS';
+const monthNames = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+
+const SCREEN_HEIGHT = Dimensions.get('window').height;
+const HEADER_HEIGHT = 80; // Estimate header height (adjust as needed)
+const WEEKDAYS_HEIGHT = 32; // Estimate weekdays row height
+const BOTTOM_BAR_HEIGHT = 70; // Estimate bottom bar height
+const GRID_VERTICAL_PADDING = 16; // Padding above and below grid
+const AVAILABLE_HEIGHT = SCREEN_HEIGHT - HEADER_HEIGHT - WEEKDAYS_HEIGHT - BOTTOM_BAR_HEIGHT - (2 * GRID_VERTICAL_PADDING);
+const ROWS = 6; // Max rows in a month
+const DAY_CELL_HEIGHT = Math.floor(AVAILABLE_HEIGHT / ROWS);
+const MONTH_ITEM_HEIGHT = DAY_CELL_HEIGHT * ROWS;
+const MODAL_HEIGHT = 420;
+
+function getDaysInMonth(year: number, month: number): number {
   return new Date(year, month + 1, 0).getDate();
 }
-
-function getFirstDayOfWeek(year: number, month: number) {
+function getFirstDayOfWeek(year: number, month: number): number {
   return new Date(year, month, 1).getDay();
 }
-
-function formatDate(date: Date) {
+function formatDate(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
-
-function isToday(dateStr: string) {
+function isToday(dateStr: string): boolean {
   const today = new Date();
   const todayStr = formatDate(today);
   return dateStr === todayStr;
 }
-
-function isTaskForDate(task: Task, targetDate: string): boolean {
-  if (!task.dueDate) return false;
-  // Convert task due date to YYYY-MM-DD format for comparison
-  const taskDate = new Date(task.dueDate);
-  const taskDateStr = formatDate(taskDate);
-  return taskDateStr === targetDate;
-}
-
-function renderRightActions(progress: any, dragX: any, onDelete: () => void) {
-  const scale = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.8, 1],
-    extrapolate: 'clamp',
-  });
-
-  const opacity = progress.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [0, 0.8, 1],
-    extrapolate: 'clamp',
-  });
-
-  return (
-    <Animated.View style={[styles.deleteButton, { opacity, transform: [{ scale }] }]}>
-      <TouchableOpacity onPress={onDelete} style={styles.deleteButtonTouchable}>
-        <Ionicons name="trash" size={24} color="#c62828" />
-      </TouchableOpacity>
-    </Animated.View>
-  );
-}
-
-// Helper to get days for the calendar grid, including prev/next month days
-function getCalendarGrid(year: number, month: number) {
+function getMonthMatrix(year: number, month: number): { date: string; isCurrentMonth: boolean }[] {
   const daysInMonth = getDaysInMonth(year, month);
-  const firstDayOfWeek = getFirstDayOfWeek(year, month);
-  const prevMonth = month === 0 ? 11 : month - 1;
-  const prevYear = month === 0 ? year - 1 : year;
-  const daysInPrevMonth = getDaysInMonth(prevYear, prevMonth);
-  // Days from previous month
-  const prevMonthDays = Array.from({ length: firstDayOfWeek }, (_, i) => ({
-    date: formatDate(new Date(prevYear, prevMonth, daysInPrevMonth - firstDayOfWeek + i + 1)),
-    isCurrentMonth: false
-  }));
-  // Days in current month
-  const thisMonthDays = Array.from({ length: daysInMonth }, (_, i) => ({
+  return Array.from({ length: daysInMonth }, (_, i) => ({
     date: formatDate(new Date(year, month, i + 1)),
     isCurrentMonth: true
   }));
-  // Days from next month to fill the grid
-  const totalCells = prevMonthDays.length + thisMonthDays.length;
-  const nextMonthDays = Array.from({ length: (7 - (totalCells % 7)) % 7 }, (_, i) => ({
-    date: formatDate(new Date(month === 11 ? year + 1 : year, month === 11 ? 0 : month + 1, i + 1)),
-    isCurrentMonth: false
-  }));
-  return [...prevMonthDays, ...thisMonthDays, ...nextMonthDays];
+}
+function getPrevMonth(year: number, month: number) {
+  return month === 0 ? { year: year - 1, month: 11 } : { year, month: month - 1 };
+}
+function getNextMonth(year: number, month: number) {
+  return month === 11 ? { year: year + 1, month: 0 } : { year, month: month + 1 };
 }
 
-// Helper to chunk an array into arrays of length n
-function chunkArray<T>(arr: T[], n: number): T[][] {
-  const result: T[][] = [];
-  for (let i = 0; i < arr.length; i += n) {
-    result.push(arr.slice(i, i + n));
-  }
-  return result;
+function getNumRowsForMonth(year: number, month: number): number {
+  const daysInMonth = getDaysInMonth(year, month);
+  const firstDay = getFirstDayOfWeek(year, month);
+  const totalCells = firstDay + daysInMonth;
+  return Math.ceil(totalCells / 7);
 }
+
+// Add a custom double-tap handler
+function useDoubleTap(callback: () => void, delay = 250) {
+  const lastTap = useRef<number | null>(null);
+  return () => {
+    const now = Date.now();
+    if (lastTap.current && now - lastTap.current < delay) {
+      callback();
+    }
+    lastTap.current = now;
+  };
+}
+
+// Memoized DayCell component
+const DayCell = memo(({ cell, isTodayDate, dayTasks, handlePress, isHighlighted }: {
+  cell: { date: string; isCurrentMonth: boolean };
+  isTodayDate: boolean;
+  dayTasks: Task[];
+  handlePress: () => void;
+  isHighlighted: boolean;
+}) => {
+  const { theme } = useTheme();
+  const colors = APPLE_COLORS[theme];
+  return (
+    <View style={styles.dayCellWrap}>
+      <TouchableWithoutFeedback onPress={handlePress}>
+        <View style={styles.dayCellTouchable}>
+          <View style={[
+            styles.dayCircle,
+            isTodayDate ? styles.todayCircle : null,
+            !isTodayDate && isHighlighted && { backgroundColor: '#f3f4f6' },
+          ]}>
+            <Text style={[
+              styles.dayNumber,
+              isTodayDate && styles.todayNumber,
+              { color: isTodayDate ? '#fff' : theme === 'dark' ? '#fff' : '#222' }
+            ]}>
+              {parseInt(cell.date.slice(-2), 10)}
+            </Text>
+          </View>
+          <View style={styles.eventDotsRow}>
+            {dayTasks.slice(0, 3).map((task: Task, idx: number) => (
+              <View
+                key={task.id}
+                style={[
+                  styles.eventDot,
+                  { backgroundColor: PRIORITY_COLORS[task.priority as keyof typeof PRIORITY_COLORS].bg },
+                  idx === 2 && dayTasks.length > 3 && styles.eventDotOverflow
+                ]}
+              />
+            ))}
+            {dayTasks.length > 3 && (
+              <View style={[styles.eventDot, styles.eventDotOverflow]} />
+            )}
+          </View>
+        </View>
+      </TouchableWithoutFeedback>
+    </View>
+  );
+});
+
+// Memoized MonthGrid component
+const MonthGrid = memo(({ days, firstDayOfWeek, numRows, getTasksForDate, isToday, handleDayPress, highlightedDate, theme }: any) => {
+  const grid: ({ date: string; isCurrentMonth: boolean } | null)[] = Array(numRows * 7).fill(null);
+  for (let i = 0; i < days.length; i++) {
+    grid[firstDayOfWeek + i] = days[i];
+  }
+  return (
+    <View style={styles.monthGridWrap}>
+      {Array.from({ length: numRows }).map((_, rowIdx) => {
+        const weekStart = rowIdx * 7;
+        const weekEnd = weekStart + 7;
+        let firstCurrent = -1, lastCurrent = -1;
+        for (let i = weekStart; i < weekEnd; i++) {
+          if (grid[i] && grid[i]?.isCurrentMonth) {
+            if (firstCurrent === -1) firstCurrent = i - weekStart;
+            lastCurrent = i - weekStart;
+          }
+        }
+        return (
+          <React.Fragment key={rowIdx}>
+            {firstCurrent !== -1 && lastCurrent !== -1 && (
+              <View style={{
+                position: 'relative',
+                height: 1,
+              }}>
+                <View style={{
+                  position: 'absolute',
+                  left: `${(firstCurrent / 7) * 100}%`,
+                  right: `${((6 - lastCurrent) / 7) * 100}%`,
+                  height: 1,
+                  backgroundColor: theme === 'dark' ? '#222' : '#e5e7eb',
+                  borderRadius: 1,
+                }} />
+              </View>
+            )}
+            <View style={{ ...styles.weekRow, height: DAY_CELL_HEIGHT, alignItems: 'center', justifyContent: 'center' }}>
+              {Array.from({ length: 7 }).map((_, colIdx) => {
+                const cell = grid[rowIdx * 7 + colIdx];
+                if (!cell) {
+                  return <View key={colIdx} style={styles.dayCellWrap} />;
+                }
+                const isTodayDate = isToday(cell.date);
+                const dayTasks = getTasksForDate(cell.date);
+                return (
+                  <DayCell
+                    key={cell.date}
+                    cell={cell}
+                    isTodayDate={isTodayDate}
+                    dayTasks={dayTasks}
+                    handlePress={() => handleDayPress(cell.date)}
+                    isHighlighted={highlightedDate === cell.date && !isTodayDate}
+                  />
+                );
+              })}
+            </View>
+          </React.Fragment>
+        );
+      })}
+    </View>
+  );
+});
 
 export default function CalendarScreen() {
   const { theme } = useTheme();
-  const isDark = theme === 'dark';
+  const colors = APPLE_COLORS[theme];
+  
+  // Profiler callback for performance monitoring
+  const onRenderCallback: ProfilerOnRenderCallback = (id, phase, actualDuration) => {
+    // Optional: Log performance data for debugging
+    // console.log(`Profiler [${id}] ${phase} took ${actualDuration}ms`);
+  };
   const today = new Date();
-  const [currentMonth, setCurrentMonth] = useState(today.getMonth());
-  const [currentYear, setCurrentYear] = useState(today.getFullYear());
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState(formatDate(today));
   const [tasks, setTasks] = useState<Task[]>([]);
   const [showAddTask, setShowAddTask] = useState(false);
-  const [editingTask, setEditingTask] = useState<any>(null);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const flatListRef = useRef<FlatList<any>>(null);
+  const [showDayDetailModal, setShowDayDetailModal] = useState(false);
+  const [modalDate, setModalDate] = useState<string | null>(null);
+  const [visibleMonth, setVisibleMonth] = useState<{ year: number; month: number }>({
+    year: today.getFullYear(),
+    month: today.getMonth(),
+  });
+  // Double-tap state for all dates
+  const lastTapRef = useRef<{ [date: string]: number }>({});
+  
+  // Animation values for modal (Reanimated)
+  // --- Reanimated modal animation ---
+  const modalOpacity = useSharedValue(0);
+  const modalScale = useSharedValue(0.8);
+  const modalTranslateY = useSharedValue(MODAL_HEIGHT);
 
-  // Load tasks from storage
+  const yearRange = 3;
+  const baseYear = today.getFullYear();
+  const monthsOfYear = Array.from({ length: (yearRange * 2 + 1) * 12 }, (_, i) => {
+    const year = baseYear - yearRange + Math.floor(i / 12);
+    const month = i % 12;
+    return { year, month };
+  });
+
+  // Callback to update visibleMonth as you scroll
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: { item: { year: number; month: number } }[] }) => {
+    if (viewableItems && viewableItems.length > 0) {
+      const { year, month } = viewableItems[0].item;
+      setVisibleMonth({ year, month });
+    }
+  });
+
+  const [addTaskDate, setAddTaskDate] = useState<string | null>(null);
+  const [showAgenda, setShowAgenda] = useState(false);
+
+  // Move agendaTasks useMemo to top level
+  const agendaTasks = useMemo(
+    () => tasks.filter(t => !t.archived && t.dueDate)
+               .sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || '')),
+    [tasks]
+  );
+
+  const [highlightedDate, setHighlightedDate] = useState<string | null>(null);
+
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY).then((data: string | null) => {
+    AsyncStorage.getItem(STORAGE_KEY).then((data) => {
       if (data) setTasks(JSON.parse(data));
     });
   }, []);
-
-  // Save tasks to storage whenever tasks change
   useEffect(() => {
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
   }, [tasks]);
 
-  const calendarDays = getCalendarGrid(currentYear, currentMonth);
+  // Scroll to current month on mount
+  useEffect(() => {
+    setTimeout(() => {
+      if (flatListRef.current) {
+        const initialIndex = (baseYear - (baseYear - yearRange)) * 12 + today.getMonth();
+        flatListRef.current.scrollToIndex({ index: initialIndex, animated: false });
+      }
+    }, 100);
+  }, []);
 
-  // Get tasks for selected date
-  const tasksForDate = tasks.filter(t => !t.archived && isTaskForDate(t, selectedDate || ''));
-
-  // Get task counts for each date
-  const getTaskCountForDate = (dateStr: string) => {
-    return tasks.filter(t => !t.archived && isTaskForDate(t, dateStr)).length;
-  };
-
-  // Get priority indicators for a date
-  const getPriorityIndicators = (dateStr: string) => {
-    const dateTasks = tasks.filter(t => !t.archived && isTaskForDate(t, dateStr));
-    const priorities = dateTasks.map(t => t.priority).filter(p => p !== 'None');
-    return [...new Set(priorities)]; // Remove duplicates
-  };
-
-  function changeMonth(offset: number) {
-    let newMonth = currentMonth + offset;
-    let newYear = currentYear;
-    if (newMonth < 0) {
-      newMonth = 11;
-      newYear--;
-    } else if (newMonth > 11) {
-      newMonth = 0;
-      newYear++;
+  // 1. Build a map of tasks by date for O(1) lookup
+  const tasksByDate = useMemo(() => {
+    const map: { [date: string]: Task[] } = {};
+    for (const t of tasks) {
+      if (!t.archived && t.dueDate && t.dueDate.length >= 10) {
+        const dateStr = t.dueDate.slice(0, 10); // YYYY-MM-DD
+        if (!map[dateStr]) map[dateStr] = [];
+        map[dateStr].push(t);
+      }
     }
-    setCurrentMonth(newMonth);
-    setCurrentYear(newYear);
-  }
+    return map;
+  }, [tasks]);
 
-  function goToToday() {
-    setCurrentMonth(today.getMonth());
-    setCurrentYear(today.getFullYear());
-    setSelectedDate(formatDate(today));
-  }
+  // 2. Replace getTasksForDate with fast lookup
+  const getTasksForDate = useCallback((dateStr: string) => tasksByDate[dateStr] || [], [tasksByDate]);
 
-  function toggleTaskCompletion(taskId: string) {
-    setTasks(prev => prev.map(t => 
-      t.id === taskId ? { ...t, completed: !t.completed } : t
-    ));
-  }
+  // Animation functions for modal (Reanimated)
+  const animateModalIn = useCallback(() => {
+    modalOpacity.value = withTiming(1, { duration: 200 });
+    modalScale.value = withSpring(1, { damping: 8, stiffness: 100 });
+    modalTranslateY.value = withSpring(0, { damping: 10, stiffness: 80 });
+  }, [modalOpacity, modalScale, modalTranslateY]);
 
-  // Add/Edit Task handlers
-  function handleSaveTask(task: any) {
+  const animateModalOut = useCallback(() => {
+    modalOpacity.value = withTiming(0, { duration: 100 });
+    modalScale.value = withTiming(0.98, { duration: 100 });
+    modalTranslateY.value = withTiming(MODAL_HEIGHT, { duration: 120 }, (finished) => {
+      if (finished) runOnJS(setShowDayDetailModal)(false);
+    });
+  }, [modalOpacity, modalScale, modalTranslateY]);
+
+  // Animated styles for modal overlay and content
+  const modalOverlayStyle = useAnimatedStyle(() => ({
+    opacity: modalOpacity.value,
+    pointerEvents: modalOpacity.value > 0.01 ? 'auto' : 'none',
+  }));
+  const modalContentStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: modalScale.value },
+      { translateY: modalTranslateY.value },
+    ],
+  }));
+
+  // Memoized handler for day press - show popover
+  const handleDayPress = useCallback((date: string) => {
+    const tasksForDate = getTasksForDate(date);
+    if (!isToday(date)) {
+      setHighlightedDate(date);
+    }
+    if (tasksForDate.length === 0) {
+      setAddTaskDate(date);
+      setShowAddTask(true);
+    } else {
+      setModalDate(date);
+      setShowDayDetailModal(true);
+    }
+  }, [getTasksForDate]);
+
+  // Add useEffect to animate modal in when showDayDetailModal becomes true
+  useEffect(() => {
+    if (showDayDetailModal) {
+      animateModalIn();
+    }
+  }, [showDayDetailModal, animateModalIn]);
+
+  // Memoized event card renderer for better performance
+  const renderEventCard = useCallback(({ item }: { item: Task }) => (
+    <View style={[styles.eventCard, { backgroundColor: colors.card, shadowColor: '#000' }]}> 
+      <View style={styles.eventCardLeft}>
+        <View style={[styles.eventCardDot, { backgroundColor: PRIORITY_COLORS[item.priority as keyof typeof PRIORITY_COLORS].bg }]} />
+      </View>
+      <View style={styles.eventCardContent}>
+        <Text style={[styles.eventCardTitle, { color: colors.text }]} numberOfLines={1}>{item.text}</Text>
+        <View style={styles.eventCardMetaRow}>
+          {item.dueDate && (
+            <Text style={styles.eventCardTime}>{item.dueDate.split('T')[1]?.slice(0,5)}</Text>
+          )}
+          {item.note && (
+            <Text style={styles.eventCardLocation} numberOfLines={1}>{item.note}</Text>
+          )}
+        </View>
+      </View>
+    </View>
+  ), [colors]);
+
+  // Memoized key extractor for better FlatList performance
+  const keyExtractor = useCallback((item: Task) => item.id, []);
+
+  // Memoized item separator for better performance
+  const ItemSeparator = useCallback(() => <View style={styles.eventCardSeparator} />, []);
+
+  // Memoized empty component for better performance
+  const ListEmptyComponent = useCallback(() => <Text style={styles.eventListEmpty}>No events</Text>, []);
+
+  // 3. Update all usages to use the new getTasksForDate (already memoized)
+  const eventListTasks = useMemo(() => getTasksForDate(selectedDate), [selectedDate, getTasksForDate]);
+  const modalTasks = useMemo(() => modalDate ? getTasksForDate(modalDate) : [], [modalDate, getTasksForDate]);
+
+  // 4. Memoize modal close handler
+  const handleModalClose = useCallback(() => {
+    setShowAddTask(false);
+    setEditingTask(null);
+    setAddTaskDate(null);
+    setHighlightedDate(null);
+  }, []);
+
+  // 5. Memoize AddEditTaskModal onSave/onDelete handlers
+  const handleTaskSave = useCallback((task: TaskForm) => {
     if (task.id) {
       setTasks(prev => prev.map(t => t.id === task.id ? { ...t, ...task } : t));
     } else {
       setTasks(prev => [
-        { ...task, id: Date.now().toString(), dueDate: task.dueDate || selectedDate, archived: false },
+        { ...task, id: Date.now().toString(), dueDate: task.dueDate || addTaskDate || selectedDate, archived: false },
         ...prev
       ]);
     }
-    setShowAddTask(false);
-    setEditingTask(null);
-  }
+    handleModalClose();
+  }, [addTaskDate, selectedDate, handleModalClose]);
 
-  function handleDeleteTask(task: any) {
+  const handleTaskDelete = useCallback((task: TaskForm) => {
     setTasks(prev => prev.filter(t => t.id !== task.id));
-    setShowAddTask(false);
-    setEditingTask(null);
+    handleModalClose();
+  }, [handleModalClose]);
+
+  // Render top bar (year pill, month, actions)
+  function renderHeader() {
+    const handleToggleView = () => {
+      if (showAgenda) {
+        const todayIndex = monthsOfYear.findIndex(
+          m => m.year === today.getFullYear() && m.month === today.getMonth()
+        );
+        if (todayIndex !== -1) {
+          setTimeout(() => {
+            flatListRef.current?.scrollToIndex({ index: todayIndex, animated: true });
+          }, 0);
+        }
+      }
+      setShowAgenda((prev) => !prev);
+    };
+    return (
+      <View style={[styles.headerWrap, { backgroundColor: theme === 'dark' ? '#000' : '#f3f4f6' }]}>
+        <Text style={[styles.monthTitle, { color: theme === 'dark' ? '#fff' : '#111' }]}>
+          {showAgenda ? 'List' : `${monthNames[visibleMonth.month]} ${visibleMonth.year}`}
+        </Text>
+        <TouchableOpacity
+          style={[styles.headerActionPill, { backgroundColor: theme === 'dark' ? '#000' : '#f3f4f6', borderColor: theme === 'dark' ? '#222' : 'transparent', borderWidth: theme === 'dark' ? 1 : 0 }]}
+          onPress={handleToggleView}
+          accessibilityLabel={showAgenda ? 'Show Calendar View' : 'Show List View'}
+        >
+          <Ionicons name={showAgenda ? 'calendar-outline' : 'list-outline'} size={22} color={theme === 'dark' ? '#fff' : '#111'} />
+        </TouchableOpacity>
+      </View>
+    );
   }
 
-  const monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ];
-
-  return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#18181c' : '#f8fafc' }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <View style={{ flex: 1 }} />
-          <TouchableOpacity
-            onPress={goToToday}
-            style={[
-              styles.todayBtn,
-              {
-                backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : '#f1f5f9',
-                borderColor: isDark ? 'rgba(255,255,255,0.10)' : '#e2e8f0',
-              },
-            ]}
-          >
-            <Text style={[styles.todayBtnText, { color: '#3b82f6' }]}>Today</Text>
-          </TouchableOpacity>
-        </View>
-        
-        {/* Month Navigation */}
-        <View style={styles.monthNav}>
-          <TouchableOpacity onPress={() => changeMonth(-1)} style={styles.navBtn}>
-            <Ionicons name="chevron-back" size={24} color={isDark ? '#fff' : '#64748b'} />
-          </TouchableOpacity>
-          <Text style={[styles.monthLabel, { color: isDark ? '#fff' : '#1e293b' }]}>
-            {monthNames[currentMonth]} {currentYear}
-          </Text>
-          <TouchableOpacity onPress={() => changeMonth(1)} style={styles.navBtn}>
-            <Ionicons name="chevron-forward" size={24} color={isDark ? '#fff' : '#64748b'} />
-          </TouchableOpacity>
-        </View>
+  // Render weekday row
+  function renderWeekdays() {
+    return (
+      <View style={[styles.weekdaysRow, { backgroundColor: theme === 'dark' ? '#000' : '#f3f4f6' }]}>
+        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+          <Text key={i} style={[styles.weekdayText, { color: theme === 'dark' ? '#fff' : '#111' }]}>{d}</Text>
+        ))}
       </View>
+    );
+  }
 
-      {/* Calendar Grid */}
-      <BlurView
-        intensity={30}
-        tint={isDark ? 'dark' : 'light'}
-        style={[
-          styles.calendarGlassContainer,
-          { backgroundColor: isDark ? 'rgba(30,41,59,0.18)' : 'rgba(255,255,255,0.28)' }
-        ]}
-      >
-        {/* Day Headers */}
-        <View style={styles.dayHeaders}>
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, i) => (
-            <View key={i} style={styles.headerCell}>
-              <Text style={[styles.dayHeader, { color: isDark ? '#fff' : '#1e293b' }]}>{day}</Text>
-            </View>
-          ))}
-        </View>
+  // Render a month grid
+  function renderMonth({ item }: ListRenderItemInfo<{ year: number; month: number }>) {
+    const days = getMonthMatrix(item.year, item.month);
+    const firstDayOfWeek = getFirstDayOfWeek(item.year, item.month);
+    const numRows = getNumRowsForMonth(item.year, item.month);
+    return (
+      <MonthGrid
+        days={days}
+        firstDayOfWeek={firstDayOfWeek}
+        numRows={numRows}
+        getTasksForDate={getTasksForDate}
+        isToday={isToday}
+        handleDayPress={handleDayPress}
+        highlightedDate={highlightedDate}
+        theme={theme}
+      />
+    );
+  }
 
-        {/* Calendar Days */}
-        <View style={styles.calendarGrid}>
-          {chunkArray(calendarDays, 7).map((week, weekIdx) => (
-            <View key={weekIdx} style={{ flexDirection: 'row' }}>
-              {week.map(({ date, isCurrentMonth }, i) => {
-            const isTodayDate = isToday(date);
-                const isSelected = selectedDate !== null && date === selectedDate;
-            const taskCount = getTaskCountForDate(date);
-                // Colors
-                const blue = '#3b82f6';
-                const red = '#ff3037';
-                const fadedColor = isDark ? '#374151' : '#cbd5e1';
-            return (
-              <TouchableOpacity
-                    key={date + i}
-                    style={styles.dayCell}
-                onPress={() => setSelectedDate(date)}
-                    activeOpacity={isCurrentMonth ? 0.7 : 1}
-                    disabled={!isCurrentMonth}
-                  >
-                    <View style={{
-                      width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center',
-                      backgroundColor: isSelected
-                        ? red
-                        : isTodayDate
-                          ? 'rgba(59,130,246,0.12)'
-                          : 'transparent',
-                      borderWidth: 0,
-                      marginBottom: 2,
-                    }}>
-                      <Text style={{
-                        color: isSelected
-                          ? '#fff'
-                          : isTodayDate
-                            ? blue
-                            : isCurrentMonth
-                              ? (isDark ? '#fff' : '#1e293b')
-                              : fadedColor,
-                        fontWeight: isSelected || isTodayDate ? '700' : '500',
-                        fontSize: 16,
-                      }}>{parseInt(date.slice(-2), 10)}</Text>
-                    </View>
-                    {/* Dot for tasks */}
-                    {taskCount > 0 && isCurrentMonth && (
-                      <View style={{ alignItems: 'center', height: 6 }}>
-                        <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: isSelected ? '#fff' : blue, marginTop: 1 }} />
-                  </View>
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-          ))}
-      </View>
-      </BlurView>
-
-      {/* Selected Date Tasks */}
-      {selectedDate && (
-      <View style={styles.tasksSection}>
-        <View style={styles.tasksHeader}>
-          <Text style={[styles.tasksTitle, { color: isDark ? '#fff' : '#1e293b' }]}>
-            {isToday(selectedDate) ? 'Today' : (() => {
-              const [year, month, day] = selectedDate.split('-').map(Number);
-              const date = new Date(year, month - 1, day);
-              return date.toLocaleDateString('en-US', { 
-                weekday: 'long', 
-                month: 'short', 
-                day: 'numeric' 
-              });
-            })()}
-          </Text>
-        </View>
-
-        <FlatList
-          data={tasksForDate}
-          keyExtractor={item => item.id}
-          scrollEnabled={tasksForDate.length > 1}
-          renderItem={({ item }) => (
-            <Swipeable
-              renderRightActions={(progress, dragX) => renderRightActions(progress, dragX, () => handleDeleteTask(item))}
-              overshootRight={false}
-              friction={2}
-              rightThreshold={40}
-              enableTrackpadTwoFingerGesture={true}
-            >
-              <TouchableOpacity
-                style={[styles.taskItem, { backgroundColor: isDark ? '#23232a' : '#fff' }]}
-                onPress={() => {
-                  setEditingTask({
-                    ...item,
-                    note: item.note || ''
-                  });
-                }}
-              >
-                <View style={styles.taskContent}>
-                  <View style={[
-                    styles.checkCircle,
-                    item.completed && styles.checkCircleCompleted,
-                    { borderColor: isDark ? '#3b82f6' : '#3b82f6' }
-                  ]}>
-                    {item.completed && <Ionicons name="checkmark" size={16} color="#fff" />}
-                  </View>
-                  <View style={styles.taskTextContainer}>
-                    <Text style={[
-                      styles.taskText,
-                      item.completed && styles.taskTextCompleted,
-                      { color: isDark ? '#fff' : '#1e293b' }
-                    ]}>
-                      {item.text}
-                    </Text>
-                    {item.priority !== 'None' && (
-                      <View style={[
-                        styles.priorityBadge,
-                        { backgroundColor: PRIORITY_COLORS[item.priority].bg }
-                      ]}>
-                        <Text style={[
-                          styles.priorityText,
-                          { color: PRIORITY_COLORS[item.priority].color }
-                        ]}>
-                          {item.priority}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-              </TouchableOpacity>
-            </Swipeable>
-          )}
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Ionicons name="calendar-outline" size={48} color={isDark ? '#64748b' : '#cbd5e1'} />
-              <Text style={[styles.emptyText, { color: isDark ? '#64748b' : '#64748b' }]}>
-                No tasks for this date
-              </Text>
-              <TouchableOpacity 
-                onPress={() => setShowAddTask(true)}
-                style={[styles.addFirstTaskBtn, { backgroundColor: isDark ? '#3b82f6' : '#3b82f6' }]}
-              >
-                <Text style={styles.addFirstTaskText}>Add Task</Text>
-              </TouchableOpacity>
-            </View>
+  // Render bottom bar
+  function renderBottomBar() {
+    return (
+      <View style={[styles.bottomBarWrap, { backgroundColor: theme === 'dark' ? '#000' : 'rgba(255,255,255,0.95)', borderTopWidth: theme === 'dark' ? 1 : 0, borderTopColor: theme === 'dark' ? '#222' : 'transparent' }]}>
+        <TouchableOpacity style={[styles.bottomBarBtn, { backgroundColor: theme === 'dark' ? '#000' : '#fff', borderColor: theme === 'dark' ? '#222' : 'transparent', borderWidth: theme === 'dark' ? 1 : 0 }]} onPress={() => {
+          setSelectedDate(formatDate(today));
+          const todayIndex = monthsOfYear.findIndex(
+            m => m.year === today.getFullYear() && m.month === today.getMonth()
+          );
+          if (todayIndex !== -1) {
+            flatListRef.current?.scrollToIndex({ index: todayIndex, animated: true });
           }
-          contentContainerStyle={styles.tasksList}
+        }}>
+          <Text style={[styles.bottomBarBtnText, { color: theme === 'dark' ? '#fff' : '#111' }]}>Today</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // Agenda/List view for upcoming tasks
+  function renderAgendaView() {
+    return (
+      <View style={[styles.container, { backgroundColor: theme === 'dark' ? '#000' : colors.background }]}>
+        <FlatList
+          data={agendaTasks}
+          keyExtractor={keyExtractor}
+          renderItem={renderEventCard}
+          ItemSeparatorComponent={ItemSeparator}
+          ListEmptyComponent={() => <Text style={[styles.eventListEmpty, { color: theme === 'dark' ? '#fff' : '#222' }]}>No events</Text>}
+          contentContainerStyle={[styles.eventListWrap, { padding: 16 }]}
         />
       </View>
-      )}
+    );
+  }
 
-      <AddEditTaskModal
-        visible={showAddTask || !!editingTask}
-        onClose={() => { setShowAddTask(false); setEditingTask(null); }}
-        onSave={handleSaveTask}
-        editingTask={editingTask}
-        onDelete={handleDeleteTask}
-      />
-    </SafeAreaView>
+  return (
+    <Profiler id="CalendarScreen" onRender={onRenderCallback}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme === 'dark' ? '#000' : colors.background, flex: 1 }]}>  
+        {renderHeader()}
+        {showAgenda ? (
+          renderAgendaView()
+        ) : (
+          <>
+            {renderWeekdays()}
+            <View/>
+            <FlatList
+              ref={flatListRef}
+              data={monthsOfYear}
+              keyExtractor={(item: { year: number; month: number }) => `${item.year}-${item.month}`}
+              showsVerticalScrollIndicator={false}
+              renderItem={renderMonth}
+              style={{ flex: 1 }}
+              getItemLayout={(_, index) => ({
+                length: MONTH_ITEM_HEIGHT,
+                offset: MONTH_ITEM_HEIGHT * index,
+                index,
+              })}
+              pagingEnabled
+              snapToInterval={MONTH_ITEM_HEIGHT}
+              decelerationRate="normal"
+              pointerEvents="box-none"
+              onViewableItemsChanged={onViewableItemsChanged.current}
+              viewabilityConfig={{ itemVisiblePercentThreshold: 60 }}
+            />
+            {/* Event list for selected day */}
+            <View style={[styles.eventListWrap, { paddingTop: 8 }]}>
+              <MemoizedEventList
+                tasks={eventListTasks}
+                keyExtractor={keyExtractor}
+                renderEventCard={renderEventCard}
+                ItemSeparator={ItemSeparator}
+                ListEmptyComponent={ListEmptyComponent}
+              />
+            </View>
+          </>
+        )}
+        {/* Modal for day detail - Always rendered but conditionally visible for instant popup */}
+        <Animated.View style={[styles.modalOverlay, modalOverlayStyle]}> 
+          <View>
+            <TouchableWithoutFeedback onPress={() => {}}>
+              <Animated.View style={[styles.sheetModalContent, modalContentStyle, { backgroundColor: theme === 'dark' ? '#000' : '#fff' }]}> 
+                <View style={[styles.sheetHeader, { backgroundColor: theme === 'dark' ? '#000' : '#f3f4f6' }]}>
+                  <Text style={[styles.sheetHeaderText, { color: theme === 'dark' ? '#fff' : '#222' }]}>Tasks for {modalDate}</Text>
+                  <TouchableOpacity
+                    onPress={() => { setAddTaskDate(modalDate); setShowAddTask(true); }}
+                    style={[styles.closeModalBtn, { backgroundColor: theme === 'dark' ? '#000' : '#f3f4f6', borderColor: theme === 'dark' ? '#222' : 'transparent', borderWidth: theme === 'dark' ? 1 : 0 }]}
+                    accessibilityLabel="Add Task"
+                  >
+                    <Ionicons name="add" size={24} color={theme === 'dark' ? '#fff' : '#111'} />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={animateModalOut} style={[styles.closeModalBtn, { backgroundColor: theme === 'dark' ? '#000' : '#f3f4f6', borderColor: theme === 'dark' ? '#222' : 'transparent', borderWidth: theme === 'dark' ? 1 : 0 }]} accessibilityLabel="Close">
+                    <Ionicons name="close" size={22} color={theme === 'dark' ? '#fff' : '#111'} />
+                  </TouchableOpacity>
+                </View>
+                <View>
+                  <FlatList
+                    data={modalTasks}
+                    keyExtractor={keyExtractor}
+                    renderItem={renderEventCard}
+                    ItemSeparatorComponent={ItemSeparator}
+                    ListEmptyComponent={() => <Text style={[styles.eventListEmpty, { color: theme === 'dark' ? '#fff' : '#222' }]}>No events</Text>}
+                    initialNumToRender={10}
+                    maxToRenderPerBatch={10}
+                    windowSize={5}
+                    removeClippedSubviews={true}
+                  />
+                </View>
+              </Animated.View>
+            </TouchableWithoutFeedback>
+          </View>
+        </Animated.View>
+        {renderBottomBar()}
+        <AddEditTaskModal
+          visible={showAddTask || !!editingTask}
+          onClose={handleModalClose}
+          onSave={handleTaskSave}
+          onDelete={handleTaskDelete}
+          editingTask={editingTask
+            ? { ...editingTask, note: editingTask.note || '' }
+            : addTaskDate
+              ? {
+                  id: '',
+                  text: '',
+                  note: '',
+                  priority: 'None',
+                  dueType: 'custom',
+                  dueDate: addTaskDate,
+                  completed: false,
+                  subtasks: [],
+                  archived: false
+                }
+              : undefined}
+        />
+      </SafeAreaView>
+    </Profiler>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
-  },
-  headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-  },
-  todayBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  todayBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  monthNav: {
+  container: { flex: 1 },
+  headerWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingTop: Platform.OS === 'ios' ? 18 : 8,
+    paddingBottom: 0,
+    paddingHorizontal: 18,
   },
-  navBtn: {
-    padding: 8,
-    borderRadius: 8,
+  yearPill: {
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+    marginRight: 10,
   },
-  monthLabel: {
-    fontSize: 20,
-    fontWeight: '600',
-  },
-  calendarGlassContainer: {
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-    marginBottom: 36,
-    borderRadius: 32,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.10)',
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 18,
-    elevation: 8,
-    overflow: 'hidden',
-  },
-  dayHeaders: {
-    flexDirection: 'row',
-    marginBottom: 2,
-    paddingHorizontal: 0,
-    width: 328,
-    alignSelf: 'center',
-  },
-  headerCell: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    margin: 4,
-  },
-  dayHeader: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 15,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-  },
-  calendarGrid: {
-    width: 328,
-    alignSelf: 'center',
-    paddingBottom: 6,
-  },
-  dayCell: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 20,
-    margin: 4,
-    borderWidth: 0,
-  },
-  selectedCell: {
-    backgroundColor: '#3b82f6',
-  },
-  dayNumber: {
+  yearPillText: {
     fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 0,
-  },
-  todayText: {
-    fontWeight: '700',
-  },
-  selectedText: {
-    fontWeight: '700',
-  },
-  taskIndicators: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  priorityDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-  },
-  taskCount: {
-    fontSize: 10,
-    fontWeight: '500',
-    marginLeft: 2,
-  },
-  tasksSection: {
-    flex: 1,
-    paddingHorizontal: 20,
-  },
-  tasksHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  tasksTitle: {
-    fontSize: 20,
     fontWeight: '600',
+    fontFamily: 'System',
   },
-  addTaskBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
+  monthTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    fontFamily: 'System',
+    marginTop: 2,
+    marginBottom: 12,
   },
-  tasksList: {
-    flexGrow: 1,
-  },
-  taskItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  taskContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  checkCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  checkCircleCompleted: {
-    backgroundColor: '#3b82f6',
-    borderColor: '#3b82f6',
-  },
-  taskTextContainer: {
-    flex: 1,
+  headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  taskText: {
-    fontSize: 16,
-    flex: 1,
+  headerActionPill: {
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginLeft: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  taskTextCompleted: {
-    textDecorationLine: 'line-through',
-    opacity: 0.6,
+  divider: {
+    height: 1,
+    marginHorizontal: 0,
+    marginBottom: 0,
+    backgroundColor: '#e5e7eb',
   },
-  priorityBadge: {
+  weekdaysRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    marginTop: 2,
+    marginBottom: 2,
   },
-  priorityText: {
-    fontSize: 12,
+  weekdayText: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 13,
+    fontWeight: '600',
+    fontFamily: 'System',
+  },
+  monthGridWrap: {
+    height: MONTH_ITEM_HEIGHT,
+    justifyContent: 'flex-start',
+    alignItems: 'stretch',
+    marginTop: 0,
+    marginBottom: 0,
+    paddingTop: GRID_VERTICAL_PADDING,
+    paddingBottom: GRID_VERTICAL_PADDING,
+  },
+  weekRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: DAY_CELL_HEIGHT,
+    height: DAY_CELL_HEIGHT,
+    margin: 0,
+    padding: 0,
+  },
+  weekDivider: {
+    height: 1,
+    marginHorizontal: 8,
+    marginVertical: 0,
+    borderRadius: 1,
+    backgroundColor: '#e5e7eb',
+  },
+  dayCellWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    minWidth: 48,
+    minHeight: DAY_CELL_HEIGHT,
+    marginVertical: 0,
+    marginHorizontal: 6,
+  },
+  dayCellTouchable: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+  dayCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  todayCircle: {
+    backgroundColor: '#ff3b30',
+  },
+  dayNumber: {
+    fontSize: 18,
+    fontWeight: '700',
+    fontFamily: 'System',
+    textAlign: 'center',
+  },
+  currentMonthNumber: {
+  },
+  overflowMonthNumber: {
     fontWeight: '600',
   },
-  emptyState: {
+  todayNumber: {
+    color: '#fff',
+  },
+  eventPillsWrap: {
+    minHeight: 18,
+    marginTop: 2,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  eventPill: {
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginTop: 2,
+    marginBottom: 1,
+    minWidth: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    maxWidth: 54,
+  },
+  eventPillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    fontFamily: 'System',
+    marginRight: 2,
+  },
+  eventPillTime: {
+    fontSize: 10,
+    color: '#ff3b30',
+    fontWeight: '500',
+    fontFamily: 'System',
+  },
+  moreEventsText: {
+    fontSize: 10,
+    marginTop: 1,
+    fontFamily: 'System',
+  },
+  bottomBarWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingBottom: Platform.OS === 'ios' ? 24 : 12,
+    paddingTop: 8,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  bottomBarBtn: {
+    borderRadius: 18,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  bottomBarBtnText: {
+    fontSize: 18,
+    fontWeight: '700',
+    fontFamily: 'System',
+  },
+  ios18Fab: {
+    display: 'none',
+  },
+  eventDotsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 2,
+    minHeight: 10,
+    minWidth: 24,
+  },
+  eventDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    marginHorizontal: 1.5,
+    marginVertical: 0,
+  },
+  eventDotOverflow: {
+  },
+  eventListWrap: {
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 0,
+    backgroundColor: 'transparent',
+  },
+  eventListHeader: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 6,
+    marginLeft: 2,
+  },
+  eventCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 0,
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  eventCardLeft: {
+    marginRight: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  eventCardDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  eventCardContent: {
+    flex: 1,
+    flexDirection: 'column',
+  },
+  eventCardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  eventCardMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  eventCardTime: {
+    fontSize: 13,
+    color: '#ff3b30',
+    fontWeight: '500',
+    marginRight: 8,
+  },
+  eventCardLocation: {
+    fontSize: 13,
+    fontWeight: '400',
+    flexShrink: 1,
+  },
+  eventCardSeparator: {
+    height: 1,
+    marginVertical: 2,
+    marginLeft: 24,
+    borderRadius: 1,
+    backgroundColor: '#e5e7eb',
+  },
+  eventListEmpty: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 12,
+  },
+  modalOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 100,
+  },
+  modalOverlayTouchable: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60,
   },
-  emptyText: {
-    fontSize: 16,
-    marginTop: 16,
-    marginBottom: 24,
+  sheetModalContent: {
+    minHeight: 200,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 18,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
+    alignItems: 'stretch',
+    width: '90%',
+    maxWidth: 420,
   },
-  addFirstTaskBtn: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 20,
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
   },
-  addFirstTaskText: {
-    color: '#fff',
+  sheetHeaderText: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  closeModalBtn: {
+    padding: 8,
+    borderRadius: 16,
+    backgroundColor: '#f3f4f6',
+    marginLeft: 8,
+  },
+  closeModalBtnText: {
     fontSize: 16,
     fontWeight: '600',
   },
-  deleteButton: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 60,
-    height: 60,
-    borderRadius: 12,
-    marginLeft: 1,
-  },
-  deleteButtonTouchable: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 60,
-    height: 60,
-    borderRadius: 12,
-    marginLeft: 1,
-  },
-}); 
+});
+

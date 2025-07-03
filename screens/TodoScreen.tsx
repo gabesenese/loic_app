@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, Modal, TextInput, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, Modal, TextInput, FlatList, KeyboardAvoidingView, Platform, TouchableWithoutFeedback } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SmartLists from '../components/SmartLists';
 import AddEditTaskModal, { PRIORITY_COLORS } from '../components/AddEditTaskModal';
@@ -9,7 +9,7 @@ import { FontAwesome5 } from '@expo/vector-icons';
 import Header from '../components/Header';
 import { useTheme } from '../ThemeContext';
 import { BlurView } from 'expo-blur';
-import { Animated } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, runOnJS, Easing } from 'react-native-reanimated';
 import { Swipeable } from 'react-native-gesture-handler';
 import { SubtaskIndicator } from '../components/SubtaskIndicator';
 
@@ -143,17 +143,15 @@ export function formatDateForDisplay(dateString: string): string {
 }
 
 const AnimatedCheckMark = ({ completed, color }: { completed: boolean, color: string }) => {
-  const scale = React.useRef(new Animated.Value(completed ? 1 : 0)).current;
+  const scale = useSharedValue(completed ? 1 : 0);
   React.useEffect(() => {
-    Animated.spring(scale, {
-      toValue: completed ? 1 : 0,
-      useNativeDriver: true,
-      friction: 5,
-      tension: 120,
-    }).start();
+    scale.value = withTiming(completed ? 1 : 0, { duration: 300 });
   }, [completed]);
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: 0.2 + 0.8 * scale.value }],
+  }));
   return (
-    <Animated.View style={{ transform: [{ scale: scale.interpolate({ inputRange: [0, 1], outputRange: [0.2, 1] }) }] }}>
+    <Animated.View style={animatedStyle}>
       {completed && <Text style={{ color, fontWeight: 'bold' }}>✓</Text>}
     </Animated.View>
   );
@@ -252,6 +250,54 @@ export default function TodoScreen({ smartList = 'all' }: { smartList?: string }
   });
   const [autoArchive, setAutoArchive] = useState(true);
   const [archiveDays, setArchiveDays] = useState(7);
+
+  const MODAL_HEIGHT = 420;
+  const modalOpacity = useSharedValue(0);
+  const modalScale = useSharedValue(0.8);
+  const modalTranslateY = useSharedValue(MODAL_HEIGHT);
+
+  const animateModalIn = () => {
+    modalOpacity.value = withTiming(1, { duration: 350, easing: Easing.out(Easing.cubic) });
+    modalScale.value = withTiming(1, { duration: 350, easing: Easing.out(Easing.cubic) });
+    modalTranslateY.value = withSpring(0, { damping: 14, stiffness: 70 });
+  };
+  const animateModalOut = () => {
+    modalOpacity.value = withTiming(0, { duration: 200, easing: Easing.in(Easing.cubic) });
+    modalScale.value = withTiming(0.98, { duration: 200, easing: Easing.in(Easing.cubic) });
+    modalTranslateY.value = withTiming(MODAL_HEIGHT, { duration: 220, easing: Easing.in(Easing.cubic) }, (finished) => {
+      if (finished) runOnJS(setEditingTask)(null);
+    });
+  };
+  const modalOverlayStyle = useAnimatedStyle(() => ({
+    opacity: modalOpacity.value,
+    pointerEvents: modalOpacity.value > 0.01 ? 'auto' : 'none',
+  }));
+  const modalContentStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: modalScale.value },
+      { translateY: modalTranslateY.value },
+    ],
+  }));
+
+  const fadeInModal = () => {
+    modalOpacity.value = withTiming(1, { duration: 300 });
+  };
+
+  const fadeOutModal = (callback?: () => void) => {
+    modalOpacity.value = withTiming(0, { duration: 200 }, (finished) => {
+      if (finished && callback) runOnJS(callback)();
+    });
+  };
+
+  const modalFadeStyle = useAnimatedStyle(() => ({
+    opacity: modalOpacity.value,
+  }));
+
+  useEffect(() => {
+    if (editingTask) {
+      animateModalIn();
+    }
+  }, [editingTask]);
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((data: string | null) => {
@@ -358,29 +404,41 @@ export default function TodoScreen({ smartList = 'all' }: { smartList?: string }
           <FontAwesome5 name="plus" size={22} color={isDark ? '#111' : '#fff'} />
         </TouchableOpacity>
       </View>
-      <AddEditTaskModal
-        visible={!!editingTask}
-        onClose={() => { setEditingTask(null); setCustomDueDate(undefined); }}
-        onSave={task => {
-          if (task.id) updateTask(task as Task);
-          else addTask(task as Omit<Task, 'id'>);
-          if (task.dueDate && task.dueType === 'custom') {
-            const dueDate = new Date(task.dueDate);
-            dueDate.setHours(0, 0, 0, 0);
-            setCurrentDate(dueDate);
-          }
-          setCustomDueDate(undefined);
-        }}
-        editingTask={editingTask ? { ...editingTask, note: editingTask.note || '', dueDate: customDueDate || editingTask.dueDate } : undefined}
-        onCustomDueDate={() => setCalendarVisible(true)}
-        onDelete={task => {
-          if (task.id) {
-            deleteTask(task.id);
-            setEditingTask(null);
-            setCustomDueDate(undefined);
-          }
-        }}
-      />
+      {editingTask && (
+        <Animated.View style={[styles.modalOverlay, modalFadeStyle]}> 
+          <View>
+            <TouchableWithoutFeedback onPress={() => {}}>
+              <View style={[styles.sheetModalContent, { backgroundColor: isDark ? '#23232a' : '#fff' }]}> 
+                <AddEditTaskModal
+                  visible={!!editingTask}
+                  onClose={() => fadeOutModal(() => setEditingTask(null))}
+                  onSave={task => {
+                    if (task.id) updateTask(task as Task);
+                    else addTask(task as Omit<Task, 'id'>);
+                    if (task.dueDate && task.dueType === 'custom') {
+                      const dueDate = new Date(task.dueDate);
+                      dueDate.setHours(0, 0, 0, 0);
+                      setCurrentDate(dueDate);
+                    }
+                    setCustomDueDate(undefined);
+                    fadeOutModal(() => setEditingTask(null));
+                  }}
+                  editingTask={editingTask ? { ...editingTask, note: editingTask.note || '', dueDate: customDueDate || editingTask.dueDate } : undefined}
+                  onCustomDueDate={() => setCalendarVisible(true)}
+                  onDelete={task => {
+                    if (task.id) {
+                      deleteTask(task.id);
+                      setEditingTask(null);
+                      setCustomDueDate(undefined);
+                    }
+                    fadeOutModal(() => setEditingTask(null));
+                  }}
+                />
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </Animated.View>
+      )}
       <CalendarPopover
         visible={calendarVisible}
         onClose={() => setCalendarVisible(false)}
@@ -561,5 +619,15 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     marginRight: 0,
     alignSelf: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  sheetModalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
   },
 }); 

@@ -54,7 +54,7 @@ export default function CalendarPopover({ visible, onClose, onSelectDate }: {
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.2)', justifyContent: 'center', alignItems: 'center' },
-  popover: { backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 16, padding: 20, width: 340, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 16, elevation: 8 },
+  popover: { backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 16, padding: 20, width: 340, minHeight: 300, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 16, elevation: 8 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   arrow: { fontSize: 20, color: '#3b82f6', paddingHorizontal: 12 },
   monthLabel: { fontSize: 18, fontWeight: 'bold', color: '#1e293b' },
