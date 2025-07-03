@@ -284,7 +284,7 @@ export default function TodoScreen({ smartList = 'all' }: { smartList?: string }
   };
 
   const fadeOutModal = (callback?: () => void) => {
-    modalOpacity.value = withTiming(0, { duration: 200 }, (finished) => {
+    modalOpacity.value = withTiming(0, { duration: 160 }, (finished) => {
       if (finished && callback) runOnJS(callback)();
     });
   };
@@ -412,6 +412,7 @@ export default function TodoScreen({ smartList = 'all' }: { smartList?: string }
                 <AddEditTaskModal
                   visible={!!editingTask}
                   onClose={() => fadeOutModal(() => setEditingTask(null))}
+                  animationType="slide"
                   onSave={task => {
                     if (task.id) updateTask(task as Task);
                     else addTask(task as Omit<Task, 'id'>);

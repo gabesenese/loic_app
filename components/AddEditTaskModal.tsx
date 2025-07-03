@@ -315,13 +315,14 @@ export const APPLE_COLORS = {
   },
 };
 
-export default function AddEditTaskModal({ visible, onClose, onSave, editingTask, onCustomDueDate, onDelete }: {
+export default function AddEditTaskModal({ visible, onClose, onSave, editingTask, onCustomDueDate, onDelete, animationType = 'none' }: {
   visible: boolean;
   onClose: () => void;
   onSave: (task: TaskForm) => void;
   editingTask?: TaskForm | null;
   onCustomDueDate?: () => void;
   onDelete?: (task: TaskForm) => void;
+  animationType?: 'none' | 'slide' | 'fade';
 }) {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
@@ -769,7 +770,7 @@ export default function AddEditTaskModal({ visible, onClose, onSave, editingTask
   }
 
   return (
-    <Modal visible={visible} animationType="none" transparent>
+    <Modal visible={visible} animationType={animationType} transparent>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalMinimalist}>
         <View style={[styles.modalCard, { backgroundColor: isDark ? '#23232a' : '#fff' }]}> 
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
