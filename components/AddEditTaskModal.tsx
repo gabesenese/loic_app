@@ -772,7 +772,7 @@ export default function AddEditTaskModal({ visible, onClose, onSave, editingTask
   return (
     <Modal visible={visible} animationType={animationType} transparent>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalMinimalist}>
-        <View style={[styles.modalCard, { backgroundColor: isDark ? '#23232a' : '#fff' }]}> 
+        <View style={[styles.modalCard, { padding: 32, borderRadius: 24, shadowOpacity: 0.08, shadowRadius: 16, elevation: 8 }]}> 
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <View style={{ flex: 1 }} />
           </View>
@@ -1218,6 +1218,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   modalCard: {
+    // backgroundColor: 'red', // DEBUG: Set to red to see the modal card
+    backgroundColor: '#fff',
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
     padding: 18,
@@ -1229,7 +1231,6 @@ const styles = StyleSheet.create({
     elevation: 8,
     marginHorizontal: 0,
     minHeight: 120,
-    backgroundColor: '#fff',
   },
   inputMinimal: {
     fontSize: 18,
@@ -1249,7 +1250,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24,
     gap: 8,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro' : undefined,
   },
   quickOptionBtn: {
     flexDirection: 'row',
@@ -1259,7 +1259,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     marginRight: 6,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro' : undefined,
   },
   quickOptionText: {
     marginLeft: 6,

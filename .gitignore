@@ -39,3 +39,6 @@ yarn-error.*
 
 # Yarn
 yarn.lock
+
+# Optimizer 
+optimizer_profiles

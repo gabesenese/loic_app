@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TouchableWithoutFeedback, SafeAreaView, FlatList, Dimensions, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TouchableWithoutFeedback, SafeAreaView, FlatList, Dimensions, Platform, ActivityIndicator } from 'react-native';
 import type { ListRenderItemInfo } from 'react-native';
 import { useTheme } from '../ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,7 +10,7 @@ import AddEditTaskModal from '../components/AddEditTaskModal';
 import * as Haptics from 'expo-haptics';
 import { Profiler } from 'react';
 import type { ProfilerOnRenderCallback } from 'react';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, runOnJS } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, runOnJS, Easing } from 'react-native-reanimated';
 import { Animated as RNAnimated } from 'react-native';
 
 // Memoized event list component
@@ -56,6 +56,7 @@ const monthNames = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
+// Restore top-level layout constants
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const HEADER_HEIGHT = 80; // Estimate header height (adjust as needed)
 const WEEKDAYS_HEIGHT = 32; // Estimate weekdays row height
@@ -134,7 +135,7 @@ const DayCell = memo(({ cell, isTodayDate, dayTasks, handlePress, isHighlighted 
           <View style={[
             styles.dayCircle,
             isTodayDate ? styles.todayCircle : null,
-            !isTodayDate && isHighlighted && { backgroundColor: '#f3f4f6' },
+            !isTodayDate && isHighlighted && { backgroundColor: theme === 'dark' ? '#22272b' : '#f3f4f6' },
           ]}>
             <Text style={[
               styles.dayNumber,
@@ -231,6 +232,21 @@ export default function CalendarScreen() {
   const { theme } = useTheme();
   const colors = APPLE_COLORS[theme];
   
+  // Declare pendingDate state at the top so it's available everywhere
+  const [pendingDate, setPendingDate] = useState<string | null>(null);
+  
+  // Memoized style objects for performance and stable props
+  const headerWrapStyle = useMemo(() => [styles.headerWrap], []);
+  const monthTitleStyle = useMemo(() => [styles.monthTitle, { color: theme === 'dark' ? '#fff' : '#111' }], [theme]);
+  const headerActionPillStyle = useMemo(() => [styles.headerActionPill, { backgroundColor: theme === 'dark' ? '#000' : '#f3f4f6', borderColor: theme === 'dark' ? '#222' : 'transparent', borderWidth: theme === 'dark' ? 1 : 0 }], [theme]);
+  const weekdaysRowStyle = useMemo(() => [styles.weekdaysRow], []);
+  const weekdayTextStyle = useMemo(() => [styles.weekdayText, { color: theme === 'dark' ? '#fff' : '#111' }], [theme]);
+  const bottomBarWrapStyle = useMemo(() => [styles.bottomBarWrap, { backgroundColor: theme === 'dark' ? '#000' : 'rgba(255,255,255,0.95)', borderTopWidth: theme === 'dark' ? 1 : 0, borderTopColor: theme === 'dark' ? '#222' : 'transparent' }], [theme]);
+  const bottomBarBtnStyle = useMemo(() => [styles.bottomBarBtn, { backgroundColor: theme === 'dark' ? '#000' : '#fff', borderColor: theme === 'dark' ? '#222' : 'transparent', borderWidth: theme === 'dark' ? 1 : 0 }], [theme]);
+  const bottomBarBtnTextStyle = useMemo(() => [styles.bottomBarBtnText, { color: theme === 'dark' ? '#fff' : '#111' }], [theme]);
+  const eventListWrapStyle = useMemo(() => [styles.eventListWrap, { padding: 16 }], []);
+  const eventListEmptyStyle = useMemo(() => [styles.eventListEmpty, { color: theme === 'dark' ? '#fff' : '#222' }], [theme]);
+  
   // Profiler callback for performance monitoring
   const onRenderCallback: ProfilerOnRenderCallback = (id, phase, actualDuration) => {
     // Optional: Log performance data for debugging
@@ -257,13 +273,26 @@ export default function CalendarScreen() {
   const modalScale = useSharedValue(0.8);
   const modalTranslateY = useSharedValue(MODAL_HEIGHT);
 
-  const yearRange = 3;
+  // 1. Limit monthsOfYear to ±1 year from today for performance
+  const yearRange = 1; // Reduced from 3 to 1 for optimization
   const baseYear = today.getFullYear();
-  const monthsOfYear = Array.from({ length: (yearRange * 2 + 1) * 12 }, (_, i) => {
+  const monthsOfYear = useMemo(() => Array.from({ length: (yearRange * 2 + 1) * 12 }, (_, i) => {
     const year = baseYear - yearRange + Math.floor(i / 12);
     const month = i % 12;
     return { year, month };
-  });
+  }), [baseYear]);
+
+  // Calculate initial index for current month
+  const initialIndex = useMemo(() => {
+    return monthsOfYear.findIndex(m => m.year === today.getFullYear() && m.month === today.getMonth());
+  }, [monthsOfYear, today]);
+
+  // Set visibleMonth to the correct initial month on mount
+  useEffect(() => {
+    if (initialIndex >= 0) {
+      setVisibleMonth(monthsOfYear[initialIndex]);
+    }
+  }, [initialIndex, monthsOfYear]);
 
   // Callback to update visibleMonth as you scroll
   const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: { item: { year: number; month: number } }[] }) => {
@@ -285,6 +314,59 @@ export default function CalendarScreen() {
 
   const [highlightedDate, setHighlightedDate] = useState<string | null>(null);
 
+  // --- AddEditTaskModal and Day Detail Modal Apple-like Animation ---
+  const MODAL_TRANSLATE_Y = 40; // Shorter for popover feel
+  const MODAL_SCALE_START = 0.96;
+  const MODAL_SCALE_END = 1;
+  const MODAL_OPACITY_START = 0;
+  const MODAL_OPACITY_END = 1;
+  const MODAL_ANIMATION_DURATION = 260;
+  const MODAL_EASING = Easing.bezier(0.4, 0, 0.2, 1);
+
+  const addModalOpacity = useSharedValue(MODAL_OPACITY_START);
+  const addModalScale = useSharedValue(MODAL_SCALE_START);
+  const addModalTranslateY = useSharedValue(MODAL_TRANSLATE_Y);
+
+  const animateAddModalIn = () => {
+    addModalOpacity.value = withTiming(MODAL_OPACITY_END, { duration: MODAL_ANIMATION_DURATION, easing: MODAL_EASING });
+    addModalScale.value = withTiming(MODAL_SCALE_END, { duration: MODAL_ANIMATION_DURATION, easing: MODAL_EASING });
+    addModalTranslateY.value = withSpring(0, { damping: 14, stiffness: 90, mass: 0.9 });
+  };
+  const animateAddModalOut = (cb?: () => void) => {
+    addModalOpacity.value = withTiming(MODAL_OPACITY_START, { duration: MODAL_ANIMATION_DURATION, easing: MODAL_EASING });
+    addModalScale.value = withTiming(MODAL_SCALE_START, { duration: MODAL_ANIMATION_DURATION, easing: MODAL_EASING });
+    addModalTranslateY.value = withTiming(MODAL_TRANSLATE_Y, { duration: MODAL_ANIMATION_DURATION, easing: MODAL_EASING }, (finished) => {
+      if (finished && cb) runOnJS(cb)();
+    });
+  };
+  const addModalOverlayStyle = useAnimatedStyle(() => ({
+    opacity: addModalOpacity.value,
+    pointerEvents: addModalOpacity.value > 0.01 ? 'auto' : 'none',
+  }));
+  const addModalContentStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: addModalScale.value },
+      { translateY: addModalTranslateY.value },
+    ],
+    opacity: addModalOpacity.value,
+  }));
+
+  // Animate in when modal is shown
+  useEffect(() => {
+    if (showAddTask || editingTask) {
+      animateAddModalIn();
+    }
+  }, [showAddTask, editingTask]);
+
+  const handleAddModalClose = useCallback(() => {
+    // Ensure all modals are closed
+    setShowAddTask(false);
+    setEditingTask(null);
+    setAddTaskDate(null);
+    setHighlightedDate(null);
+    setShowDayDetailModal(false);
+  }, []);
+
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((data) => {
       if (data) setTasks(JSON.parse(data));
@@ -293,16 +375,6 @@ export default function CalendarScreen() {
   useEffect(() => {
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
   }, [tasks]);
-
-  // Scroll to current month on mount
-  useEffect(() => {
-    setTimeout(() => {
-      if (flatListRef.current) {
-        const initialIndex = (baseYear - (baseYear - yearRange)) * 12 + today.getMonth();
-        flatListRef.current.scrollToIndex({ index: initialIndex, animated: false });
-      }
-    }, 100);
-  }, []);
 
   // 1. Build a map of tasks by date for O(1) lookup
   const tasksByDate = useMemo(() => {
@@ -331,9 +403,19 @@ export default function CalendarScreen() {
     modalOpacity.value = withTiming(0, { duration: 100 });
     modalScale.value = withTiming(0.98, { duration: 100 });
     modalTranslateY.value = withTiming(MODAL_HEIGHT, { duration: 120 }, (finished) => {
-      if (finished) runOnJS(setShowDayDetailModal)(false);
+      if (finished) {
+        runOnJS(() => {
+          setShowDayDetailModal(false);
+          setShowAddTask(false); // Ensure add task modal is closed
+          setEditingTask(null);
+          if (pendingDate) {
+            actuallyHandleDayPress(pendingDate);
+            setPendingDate(null);
+          }
+        })();
+      }
     });
-  }, [modalOpacity, modalScale, modalTranslateY]);
+  }, [modalOpacity, modalScale, modalTranslateY, pendingDate]);
 
   // Animated styles for modal overlay and content
   const modalOverlayStyle = useAnimatedStyle(() => ({
@@ -349,10 +431,24 @@ export default function CalendarScreen() {
 
   // Memoized handler for day press - show popover
   const handleDayPress = useCallback((date: string) => {
+    // If modal is open, close it first and queue the next date
+    if (showDayDetailModal) {
+      setPendingDate(date);
+      animateModalOut();
+      return;
+    }
+    actuallyHandleDayPress(date);
+  }, [getTasksForDate, showDayDetailModal, animateModalOut]);
+
+  const actuallyHandleDayPress = (date: string) => {
     const tasksForDate = getTasksForDate(date);
     if (!isToday(date)) {
       setHighlightedDate(date);
     }
+    // Ensure only one modal is open at a time
+    setShowDayDetailModal(false);
+    setShowAddTask(false);
+    setEditingTask(null);
     if (tasksForDate.length === 0) {
       setAddTaskDate(date);
       setShowAddTask(true);
@@ -360,7 +456,7 @@ export default function CalendarScreen() {
       setModalDate(date);
       setShowDayDetailModal(true);
     }
-  }, [getTasksForDate]);
+  };
 
   // Add useEffect to animate modal in when showDayDetailModal becomes true
   useEffect(() => {
@@ -368,6 +464,14 @@ export default function CalendarScreen() {
       animateModalIn();
     }
   }, [showDayDetailModal, animateModalIn]);
+
+  // Ensure pendingDate is handled after modal closes
+  useEffect(() => {
+    if (!showDayDetailModal && pendingDate) {
+      actuallyHandleDayPress(pendingDate);
+      setPendingDate(null);
+    }
+  }, [showDayDetailModal, pendingDate]);
 
   // Memoized event card renderer for better performance
   const renderEventCard = useCallback(({ item }: { item: Task }) => (
@@ -398,80 +502,49 @@ export default function CalendarScreen() {
   // Memoized empty component for better performance
   const ListEmptyComponent = useCallback(() => <Text style={styles.eventListEmpty}>No events</Text>, []);
 
-  // 3. Update all usages to use the new getTasksForDate (already memoized)
-  const eventListTasks = useMemo(() => getTasksForDate(selectedDate), [selectedDate, getTasksForDate]);
-  const modalTasks = useMemo(() => modalDate ? getTasksForDate(modalDate) : [], [modalDate, getTasksForDate]);
-
-  // 4. Memoize modal close handler
-  const handleModalClose = useCallback(() => {
-    setShowAddTask(false);
-    setEditingTask(null);
-    setAddTaskDate(null);
-    setHighlightedDate(null);
-  }, []);
-
-  // 5. Memoize AddEditTaskModal onSave/onDelete handlers
-  const handleTaskSave = useCallback((task: TaskForm) => {
-    if (task.id) {
-      setTasks(prev => prev.map(t => t.id === task.id ? { ...t, ...task } : t));
-    } else {
-      setTasks(prev => [
-        { ...task, id: Date.now().toString(), dueDate: task.dueDate || addTaskDate || selectedDate, archived: false },
-        ...prev
-      ]);
-    }
-    handleModalClose();
-  }, [addTaskDate, selectedDate, handleModalClose]);
-
-  const handleTaskDelete = useCallback((task: TaskForm) => {
-    setTasks(prev => prev.filter(t => t.id !== task.id));
-    handleModalClose();
-  }, [handleModalClose]);
-
-  // Render top bar (year pill, month, actions)
-  function renderHeader() {
-    const handleToggleView = () => {
-      if (showAgenda) {
-        const todayIndex = monthsOfYear.findIndex(
-          m => m.year === today.getFullYear() && m.month === today.getMonth()
-        );
-        if (todayIndex !== -1) {
-          setTimeout(() => {
-            flatListRef.current?.scrollToIndex({ index: todayIndex, animated: true });
-          }, 0);
-        }
+  // 3. Memoize all handlers and derived data
+  const handleToggleView = useCallback(() => {
+    if (showAgenda) {
+      const todayIndex = monthsOfYear.findIndex(
+        m => m.year === today.getFullYear() && m.month === today.getMonth()
+      );
+      if (todayIndex !== -1) {
+        setTimeout(() => {
+          flatListRef.current?.scrollToIndex({ index: todayIndex, animated: true });
+        }, 0);
       }
-      setShowAgenda((prev) => !prev);
-    };
-    return (
-      <View style={[styles.headerWrap, { backgroundColor: theme === 'dark' ? '#000' : '#f3f4f6' }]}>
-        <Text style={[styles.monthTitle, { color: theme === 'dark' ? '#fff' : '#111' }]}>
-          {showAgenda ? 'List' : `${monthNames[visibleMonth.month]} ${visibleMonth.year}`}
-        </Text>
-        <TouchableOpacity
-          style={[styles.headerActionPill, { backgroundColor: theme === 'dark' ? '#000' : '#f3f4f6', borderColor: theme === 'dark' ? '#222' : 'transparent', borderWidth: theme === 'dark' ? 1 : 0 }]}
-          onPress={handleToggleView}
-          accessibilityLabel={showAgenda ? 'Show Calendar View' : 'Show List View'}
-        >
-          <Ionicons name={showAgenda ? 'calendar-outline' : 'list-outline'} size={22} color={theme === 'dark' ? '#fff' : '#111'} />
-        </TouchableOpacity>
-      </View>
-    );
-  }
+    }
+    setShowAgenda((prev) => !prev);
+  }, [showAgenda, monthsOfYear, today]);
 
-  // Render weekday row
-  function renderWeekdays() {
-    return (
-      <View style={[styles.weekdaysRow, { backgroundColor: theme === 'dark' ? '#000' : '#f3f4f6' }]}>
+  // 4. Memoize renderHeader, renderWeekdays, renderMonth, renderBottomBar, renderAgendaView
+  const renderHeader = useCallback(() => (
+    <View style={headerWrapStyle}>
+      <Text style={monthTitleStyle}>
+        {showAgenda ? 'List' : `${monthNames[visibleMonth.month]} ${visibleMonth.year}`}
+      </Text>
+      <TouchableOpacity
+        style={headerActionPillStyle}
+        onPress={handleToggleView}
+        accessibilityLabel={showAgenda ? 'Show Calendar View' : 'Show List View'}
+      >
+        <Ionicons name={showAgenda ? 'calendar-outline' : 'list-outline'} size={22} color={theme === 'dark' ? '#fff' : '#111'} />
+      </TouchableOpacity>
+    </View>
+  ), [headerWrapStyle, monthTitleStyle, showAgenda, visibleMonth, headerActionPillStyle, handleToggleView, theme]);
+
+  const renderWeekdays = useCallback(() => (
+    <>
+      <View style={weekdaysRowStyle}>
         {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
-          <Text key={i} style={[styles.weekdayText, { color: theme === 'dark' ? '#fff' : '#111' }]}>{d}</Text>
+          <Text key={i} style={weekdayTextStyle}>{d}</Text>
         ))}
       </View>
-    );
-  }
+      <View style={styles.weekdaysDivider} />
+    </>
+  ), [weekdaysRowStyle, weekdayTextStyle]);
 
-  // Render a month grid
-  function renderMonth({ item }: ListRenderItemInfo<{ year: number; month: number }>) {
+  const renderMonth = useCallback(({ item }: ListRenderItemInfo<{ year: number; month: number }>) => {
     const days = getMonthMatrix(item.year, item.month);
     const firstDayOfWeek = getFirstDayOfWeek(item.year, item.month);
     const numRows = getNumRowsForMonth(item.year, item.month);
@@ -487,42 +560,93 @@ export default function CalendarScreen() {
         theme={theme}
       />
     );
-  }
+  }, [getTasksForDate, handleDayPress, highlightedDate, theme]);
 
-  // Render bottom bar
-  function renderBottomBar() {
-    return (
-      <View style={[styles.bottomBarWrap, { backgroundColor: theme === 'dark' ? '#000' : 'rgba(255,255,255,0.95)', borderTopWidth: theme === 'dark' ? 1 : 0, borderTopColor: theme === 'dark' ? '#222' : 'transparent' }]}>
-        <TouchableOpacity style={[styles.bottomBarBtn, { backgroundColor: theme === 'dark' ? '#000' : '#fff', borderColor: theme === 'dark' ? '#222' : 'transparent', borderWidth: theme === 'dark' ? 1 : 0 }]} onPress={() => {
-          setSelectedDate(formatDate(today));
-          const todayIndex = monthsOfYear.findIndex(
-            m => m.year === today.getFullYear() && m.month === today.getMonth()
-          );
-          if (todayIndex !== -1) {
-            flatListRef.current?.scrollToIndex({ index: todayIndex, animated: true });
-          }
-        }}>
-          <Text style={[styles.bottomBarBtnText, { color: theme === 'dark' ? '#fff' : '#111' }]}>Today</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+  const renderBottomBar = useCallback(() => (
+    <View style={bottomBarWrapStyle}>
+      <TouchableOpacity style={bottomBarBtnStyle} onPress={() => {
+        setSelectedDate(formatDate(today));
+        const todayIndex = monthsOfYear.findIndex(
+          m => m.year === today.getFullYear() && m.month === today.getMonth()
+        );
+        if (todayIndex !== -1) {
+          flatListRef.current?.scrollToIndex({ index: todayIndex, animated: true });
+        }
+      }}>
+        <Text style={bottomBarBtnTextStyle}>Today</Text>
+      </TouchableOpacity>
+    </View>
+  ), [bottomBarWrapStyle, bottomBarBtnStyle, bottomBarBtnTextStyle, monthsOfYear, today]);
 
-  // Agenda/List view for upcoming tasks
-  function renderAgendaView() {
-    return (
-      <View style={[styles.container, { backgroundColor: theme === 'dark' ? '#000' : colors.background }]}>
-        <FlatList
-          data={agendaTasks}
-          keyExtractor={keyExtractor}
-          renderItem={renderEventCard}
-          ItemSeparatorComponent={ItemSeparator}
-          ListEmptyComponent={() => <Text style={[styles.eventListEmpty, { color: theme === 'dark' ? '#fff' : '#222' }]}>No events</Text>}
-          contentContainerStyle={[styles.eventListWrap, { padding: 16 }]}
-        />
-      </View>
-    );
-  }
+  const renderAgendaView = useCallback(() => (
+    <View style={[styles.container, { backgroundColor: theme === 'dark' ? '#000' : colors.background }]}> 
+      <FlatList
+        data={agendaTasks}
+        keyExtractor={keyExtractor}
+        renderItem={renderEventCard}
+        ItemSeparatorComponent={ItemSeparator}
+        ListEmptyComponent={() => <Text style={eventListEmptyStyle}>No events</Text>}
+        contentContainerStyle={eventListWrapStyle}
+        initialNumToRender={5} // Optimization: minimal render
+        maxToRenderPerBatch={5}
+        windowSize={3}
+      />
+    </View>
+  ), [agendaTasks, keyExtractor, renderEventCard, ItemSeparator, eventListEmptyStyle, eventListWrapStyle, theme, colors]);
+
+  // Restore missing memoized variables and handlers
+  const eventListTasks = useMemo(() => getTasksForDate(selectedDate), [selectedDate, getTasksForDate]);
+  const modalTasks = useMemo(() => modalDate ? getTasksForDate(modalDate) : [], [modalDate, getTasksForDate]);
+
+  const handleTaskSave = useCallback((task: TaskForm) => {
+    if (task.id) {
+      setTasks(prev => prev.map(t => t.id === task.id ? { ...t, ...task } : t));
+    } else {
+      setTasks(prev => [
+        { ...task, id: Date.now().toString(), dueDate: task.dueDate || addTaskDate || selectedDate, archived: false },
+        ...prev
+      ]);
+    }
+    handleAddModalClose();
+  }, [addTaskDate, selectedDate, handleAddModalClose]);
+
+  const handleTaskDelete = useCallback((task: TaskForm) => {
+    setTasks(prev => prev.filter(t => t.id !== task.id));
+    handleAddModalClose();
+  }, [handleAddModalClose]);
+
+  // Apply the same animation and style to the day detail modal
+  const dayModalOpacity = useSharedValue(MODAL_OPACITY_START);
+  const dayModalScale = useSharedValue(MODAL_SCALE_START);
+  const dayModalTranslateY = useSharedValue(MODAL_TRANSLATE_Y);
+  const animateDayModalIn = () => {
+    dayModalOpacity.value = withTiming(MODAL_OPACITY_END, { duration: MODAL_ANIMATION_DURATION, easing: MODAL_EASING });
+    dayModalScale.value = withTiming(MODAL_SCALE_END, { duration: MODAL_ANIMATION_DURATION, easing: MODAL_EASING });
+    dayModalTranslateY.value = withSpring(0, { damping: 14, stiffness: 90, mass: 0.9 });
+  };
+  const animateDayModalOut = (cb?: () => void) => {
+    dayModalOpacity.value = withTiming(MODAL_OPACITY_START, { duration: MODAL_ANIMATION_DURATION, easing: MODAL_EASING });
+    dayModalScale.value = withTiming(MODAL_SCALE_START, { duration: MODAL_ANIMATION_DURATION, easing: MODAL_EASING });
+    dayModalTranslateY.value = withTiming(MODAL_TRANSLATE_Y, { duration: MODAL_ANIMATION_DURATION, easing: MODAL_EASING }, (finished) => {
+      if (finished && cb) runOnJS(cb)();
+    });
+  };
+  const dayModalOverlayStyle = useAnimatedStyle(() => ({
+    opacity: dayModalOpacity.value,
+    pointerEvents: dayModalOpacity.value > 0.01 ? 'auto' : 'none',
+  }));
+  const dayModalContentStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: dayModalScale.value },
+      { translateY: dayModalTranslateY.value },
+    ],
+    opacity: dayModalOpacity.value,
+  }));
+  useEffect(() => {
+    if (showDayDetailModal) {
+      animateDayModalIn();
+    }
+  }, [showDayDetailModal]);
 
   return (
     <Profiler id="CalendarScreen" onRender={onRenderCallback}>
@@ -552,6 +676,10 @@ export default function CalendarScreen() {
               pointerEvents="box-none"
               onViewableItemsChanged={onViewableItemsChanged.current}
               viewabilityConfig={{ itemVisiblePercentThreshold: 60 }}
+              initialNumToRender={2} // Optimization: minimal render
+              maxToRenderPerBatch={2}
+              windowSize={3}
+              initialScrollIndex={initialIndex}
             />
             {/* Event list for selected day */}
             <View style={[styles.eventListWrap, { paddingTop: 8 }]}>
@@ -565,21 +693,24 @@ export default function CalendarScreen() {
             </View>
           </>
         )}
-        {/* Modal for day detail - Always rendered but conditionally visible for instant popup */}
-        <Animated.View style={[styles.modalOverlay, modalOverlayStyle]}> 
-          <View>
-            <TouchableWithoutFeedback onPress={() => {}}>
-              <Animated.View style={[styles.sheetModalContent, modalContentStyle, { backgroundColor: theme === 'dark' ? '#000' : '#fff' }]}> 
-                <View style={[styles.sheetHeader, { backgroundColor: theme === 'dark' ? '#000' : '#f3f4f6' }]}>
+        {/* Modal for day detail - Only rendered when visible */}
+        {showDayDetailModal && (
+          <Animated.View style={[styles.modalOverlay, dayModalOverlayStyle, { backgroundColor: 'rgba(0,0,0,0.18)' }]}> 
+            <TouchableWithoutFeedback
+              style={{ flex: 1, position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+              onPress={() => animateDayModalOut()}
+            >
+              <Animated.View style={[styles.sheetModalContent, dayModalContentStyle, { backgroundColor: theme === 'dark' ? '#000' : '#fff', padding: 32, borderRadius: 24, shadowOpacity: 0.08, shadowRadius: 16, elevation: 8 /*, fontFamily: Platform.OS === 'ios' ? 'SF Pro' : undefined*/ }]}> 
+                <View style={[styles.sheetHeader, { backgroundColor: theme === 'dark' ? '#000' : '#f3f4f6' }]}> 
                   <Text style={[styles.sheetHeaderText, { color: theme === 'dark' ? '#fff' : '#222' }]}>Tasks for {modalDate}</Text>
                   <TouchableOpacity
-                    onPress={() => { setAddTaskDate(modalDate); setShowAddTask(true); }}
+                    onPress={() => { setShowDayDetailModal(false); setAddTaskDate(modalDate); setShowAddTask(true); }}
                     style={[styles.closeModalBtn, { backgroundColor: theme === 'dark' ? '#000' : '#f3f4f6', borderColor: theme === 'dark' ? '#222' : 'transparent', borderWidth: theme === 'dark' ? 1 : 0 }]}
                     accessibilityLabel="Add Task"
                   >
                     <Ionicons name="add" size={24} color={theme === 'dark' ? '#fff' : '#111'} />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={animateModalOut} style={[styles.closeModalBtn, { backgroundColor: theme === 'dark' ? '#000' : '#f3f4f6', borderColor: theme === 'dark' ? '#222' : 'transparent', borderWidth: theme === 'dark' ? 1 : 0 }]} accessibilityLabel="Close">
+                  <TouchableOpacity onPress={() => animateDayModalOut()} style={[styles.closeModalBtn, { backgroundColor: theme === 'dark' ? '#000' : '#f3f4f6', borderColor: theme === 'dark' ? '#222' : 'transparent', borderWidth: theme === 'dark' ? 1 : 0 }]} accessibilityLabel="Close">
                     <Ionicons name="close" size={22} color={theme === 'dark' ? '#fff' : '#111'} />
                   </TouchableOpacity>
                 </View>
@@ -589,39 +720,44 @@ export default function CalendarScreen() {
                     keyExtractor={keyExtractor}
                     renderItem={renderEventCard}
                     ItemSeparatorComponent={ItemSeparator}
-                    ListEmptyComponent={() => <Text style={[styles.eventListEmpty, { color: theme === 'dark' ? '#fff' : '#222' }]}>No events</Text>}
-                    initialNumToRender={10}
-                    maxToRenderPerBatch={10}
-                    windowSize={5}
+                    ListEmptyComponent={() => <Text style={eventListEmptyStyle}>No events</Text>}
+                    initialNumToRender={5} // Optimization: minimal render
+                    maxToRenderPerBatch={5}
+                    windowSize={3}
                     removeClippedSubviews={true}
                   />
                 </View>
               </Animated.View>
             </TouchableWithoutFeedback>
-          </View>
-        </Animated.View>
+          </Animated.View>
+        )}
         {renderBottomBar()}
-        <AddEditTaskModal
-          visible={showAddTask || !!editingTask}
-          onClose={handleModalClose}
-          onSave={handleTaskSave}
-          onDelete={handleTaskDelete}
-          editingTask={editingTask
-            ? { ...editingTask, note: editingTask.note || '' }
-            : addTaskDate
-              ? {
-                  id: '',
-                  text: '',
-                  note: '',
-                  priority: 'None',
-                  dueType: 'custom',
-                  dueDate: addTaskDate,
-                  completed: false,
-                  subtasks: [],
-                  archived: false
-                }
-              : undefined}
-        />
+        {(showAddTask || !!editingTask) && (
+          <AddEditTaskModal
+            visible={showAddTask || !!editingTask}
+            onClose={handleAddModalClose}
+            onSave={handleTaskSave}
+            onDelete={handleTaskDelete}
+            editingTask={
+              editingTask
+                ? { ...editingTask, note: editingTask.note || '' }
+                : addTaskDate
+                ? {
+                    id: '',
+                    text: '',
+                    note: '',
+                    priority: 'None',
+                    dueType: 'custom',
+                    dueDate: addTaskDate,
+                    completed: false,
+                    subtasks: [],
+                    archived: false,
+                  }
+                : undefined
+            }
+            animationType="slide"
+          />
+        )}
       </SafeAreaView>
     </Profiler>
   );
@@ -680,6 +816,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 8,
     marginTop: 2,
+    marginBottom: 2,
+  },
+  weekdaysDivider: {
+    height: 1,
+    backgroundColor: '#b0b3b8',
+    width: '100%',
     marginBottom: 2,
   },
   weekdayText: {
