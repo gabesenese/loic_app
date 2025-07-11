@@ -2,15 +2,22 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, SafeAreaView, TouchableOpacity, Platform, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import SmartLists from '../components/SmartLists';
-import TaskDetailModal from '../components/TaskDetailModal';
+import TaskModal from '../components/TaskModal';
 import { useTheme } from '../ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { PRIORITY_COLORS } from '../components/AddEditTaskModal';
+// PRIORITY_COLORS moved to local definition
 import { Ionicons } from '@expo/vector-icons';
 import { SubtaskIndicator } from '../components/SubtaskIndicator';
 
 const STORAGE_KEY = 'TODO_TASKS';
 const PRIORITY_ORDER = { High: 1, Medium: 2, Low: 3, None: 4 };
+
+const PRIORITY_COLORS = {
+  None: { bg: '#f2f2f7', color: '#8e8e93', border: '#e5e5ea' },
+  Low: { bg: '#e9f8ef', color: '#34c759', border: '#b7f5d8' },
+  Medium: { bg: '#fff6e5', color: '#ff9500', border: '#ffe5b2' },
+  High: { bg: '#ffe5e7', color: '#ff3b30', border: '#ffd1d4' },
+};
 
 // Explicit Task type
 interface Task {
@@ -143,12 +150,24 @@ export default function InboxScreen() {
         />
       </View>
       
-      {/* Apple-style Task Detail Modal */}
-      <TaskDetailModal
-        task={viewTask}
-        visible={!!viewTask}
-        onClose={() => setViewTask(null)}
-      />
+      {/* Task Detail Modal */}
+      {viewTask && (
+        <TaskModal
+          visible={!!viewTask}
+          onClose={() => setViewTask(null)}
+          title="Task Details"
+          maxHeight={700}
+        >
+          <View style={{ padding: 20 }}>
+            <Text style={{ fontSize: 18, fontWeight: '600', marginBottom: 20 }}>
+              {viewTask.text}
+            </Text>
+            <Text style={{ color: '#666', marginBottom: 20 }}>
+              Task detail component will be added here
+            </Text>
+          </View>
+        </TaskModal>
+      )}
     </View>
   );
 }

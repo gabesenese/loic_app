@@ -38,8 +38,6 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
       } catch (e) {
         // ignore
       }
-    } else {
-      console.warn('Attempted to set invalid theme value:', t);
     }
   };
 

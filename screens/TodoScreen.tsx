@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, Modal, TextInput, FlatList, KeyboardAvoidingView, Platform, TouchableWithoutFeedback } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SmartLists from '../components/SmartLists';
-import AddEditTaskModal, { PRIORITY_COLORS } from '../components/AddEditTaskModal';
 import CalendarPopover from '../components/CalendarPopover';
 import { Ionicons } from '@expo/vector-icons';
 import { FontAwesome5 } from '@expo/vector-icons';
@@ -12,6 +11,7 @@ import { BlurView } from 'expo-blur';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, runOnJS, Easing } from 'react-native-reanimated';
 import { Swipeable } from 'react-native-gesture-handler';
 import { SubtaskIndicator } from '../components/SubtaskIndicator';
+import TaskModal from '../components/TaskModal';
 
 interface Task {
   id: string;
@@ -29,6 +29,14 @@ interface Task {
 const STORAGE_KEY = 'TODO_TASKS';
 const AUTO_ARCHIVE_KEY = 'AUTO_ARCHIVE_ENABLED';
 const ARCHIVE_DAYS_KEY = 'ARCHIVE_DAYS';
+
+// Priority colors for compatibility
+const PRIORITY_COLORS = {
+  None: { bg: '#F2F2F7', color: '#C7C7CC', border: '#E5E5EA' },
+  Low: { bg: '#E9F8EF', color: '#34C759', border: '#B7F5D8' },
+  Medium: { bg: '#FFF6E5', color: '#FF9500', border: '#FFE5B2' },
+  High: { bg: '#FFE5E7', color: '#FF3B30', border: '#FFD1D4' },
+};
 
 function renderRightActions(progress: any, dragX: any, onDelete: () => void) {
   const scale = progress.interpolate({
@@ -157,7 +165,7 @@ const AnimatedCheckMark = ({ completed, color }: { completed: boolean, color: st
   );
 };
 
-const TaskList = ({ tasks, onToggle, onEdit, onDelete }: { tasks: Task[], onToggle: (id: string) => void, onEdit: (task: Task) => void, onDelete: (id: string) => void }) => {
+const TaskList = ({ tasks, onToggle, onEdit, onDelete, onView }: { tasks: Task[], onToggle: (id: string) => void, onEdit: (task: Task) => void, onDelete: (id: string) => void, onView: (task: Task) => void }) => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
 
@@ -177,13 +185,19 @@ const TaskList = ({ tasks, onToggle, onEdit, onDelete }: { tasks: Task[], onTogg
           >
             <TouchableOpacity
               style={[styles.taskItem, { backgroundColor: isDark ? '#23232a' : '#fafbfc', borderColor: isDark ? '#333' : '#eee' }]}
-              onPress={() => onEdit(item)}
+              onPress={() => onView(item)}
               activeOpacity={0.8}
             >
               <TouchableOpacity onPress={() => onToggle(item.id)} style={[styles.checkCircle, item.completed && styles.checkCircleCompleted, { borderColor: isDark ? '#3b82f6' : '#3b82f6', backgroundColor: item.completed ? (isDark ? '#3b82f6' : '#3b82f6') : 'transparent' }] }>
                 <AnimatedCheckMark completed={item.completed} color={isDark ? '#fff' : '#fff'} />
               </TouchableOpacity>
-              <Text style={[styles.taskText, item.completed && styles.taskTextCompleted, { color: isDark ? '#fff' : '#222' }]}>{item.text}</Text>
+              <TouchableOpacity 
+                style={{ flex: 1 }}
+                onPress={() => onView(item)}
+                onLongPress={() => onEdit(item)}
+              >
+                <Text style={[styles.taskText, item.completed && styles.taskTextCompleted, { color: isDark ? '#fff' : '#222' }]}>{item.text}</Text>
+              </TouchableOpacity>
               {/* Subtask indicator: small green dot if subtasks exist */}
               {item.subtasks && item.subtasks.length > 0 && !item.completed && (
                 <SubtaskIndicator style={styles.subtaskDot} />
@@ -242,6 +256,8 @@ export default function TodoScreen({ smartList = 'all' }: { smartList?: string }
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [viewingTask, setViewingTask] = useState<Task | null>(null);
+  const [showTaskForm, setShowTaskForm] = useState(false);
   const [customDueDate, setCustomDueDate] = useState<string | undefined>(undefined);
   const [currentDate, setCurrentDate] = useState(() => {
     const now = new Date();
@@ -251,53 +267,8 @@ export default function TodoScreen({ smartList = 'all' }: { smartList?: string }
   const [autoArchive, setAutoArchive] = useState(true);
   const [archiveDays, setArchiveDays] = useState(7);
 
-  const MODAL_HEIGHT = 420;
-  const modalOpacity = useSharedValue(0);
-  const modalScale = useSharedValue(0.8);
-  const modalTranslateY = useSharedValue(MODAL_HEIGHT);
 
-  const animateModalIn = () => {
-    modalOpacity.value = withTiming(1, { duration: 350, easing: Easing.out(Easing.cubic) });
-    modalScale.value = withTiming(1, { duration: 350, easing: Easing.out(Easing.cubic) });
-    modalTranslateY.value = withSpring(0, { damping: 14, stiffness: 70 });
-  };
-  const animateModalOut = () => {
-    modalOpacity.value = withTiming(0, { duration: 200, easing: Easing.in(Easing.cubic) });
-    modalScale.value = withTiming(0.98, { duration: 200, easing: Easing.in(Easing.cubic) });
-    modalTranslateY.value = withTiming(MODAL_HEIGHT, { duration: 220, easing: Easing.in(Easing.cubic) }, (finished) => {
-      if (finished) runOnJS(setEditingTask)(null);
-    });
-  };
-  const modalOverlayStyle = useAnimatedStyle(() => ({
-    opacity: modalOpacity.value,
-    pointerEvents: modalOpacity.value > 0.01 ? 'auto' : 'none',
-  }));
-  const modalContentStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: modalScale.value },
-      { translateY: modalTranslateY.value },
-    ],
-  }));
 
-  const fadeInModal = () => {
-    modalOpacity.value = withTiming(1, { duration: 300 });
-  };
-
-  const fadeOutModal = (callback?: () => void) => {
-    modalOpacity.value = withTiming(0, { duration: 160 }, (finished) => {
-      if (finished && callback) runOnJS(callback)();
-    });
-  };
-
-  const modalFadeStyle = useAnimatedStyle(() => ({
-    opacity: modalOpacity.value,
-  }));
-
-  useEffect(() => {
-    if (editingTask) {
-      animateModalIn();
-    }
-  }, [editingTask]);
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((data: string | null) => {
@@ -382,8 +353,12 @@ export default function TodoScreen({ smartList = 'all' }: { smartList?: string }
         <TaskList
           tasks={filteredTasks}
           onToggle={id => setTasks(prev => prev.map(t => t.id === id ? { ...t, completed: !t.completed } : t))}
-          onEdit={task => setEditingTask(task)}
+          onEdit={task => {
+            setEditingTask(task);
+            setShowTaskForm(true);
+          }}
           onDelete={deleteTask}
+          onView={task => setViewingTask(task)}
         />
         <TouchableOpacity
           style={[styles.addTaskBtn, {
@@ -396,50 +371,103 @@ export default function TodoScreen({ smartList = 'all' }: { smartList?: string }
             justifyContent: 'center',
             alignItems: 'center',
           }]}
-          onPress={() => setEditingTask({
-            id: '', text: '', note: '', priority: 'None', dueType: 'none', dueDate: undefined, completed: false, subtasks: [], category: '', archived: false
-          })}
+          onPress={() => {
+          setShowTaskForm(true);
+        }}
           activeOpacity={0.8}
         >
           <FontAwesome5 name="plus" size={22} color={isDark ? '#111' : '#fff'} />
         </TouchableOpacity>
       </View>
-      {editingTask && (
-        <Animated.View style={[styles.modalOverlay, modalFadeStyle]}> 
-          <View>
-            <TouchableWithoutFeedback onPress={() => {}}>
-              <View style={[styles.sheetModalContent, { backgroundColor: isDark ? '#23232a' : '#fff' }]}> 
-                <AddEditTaskModal
-                  visible={!!editingTask}
-                  onClose={() => fadeOutModal(() => setEditingTask(null))}
-                  animationType="slide"
-                  onSave={task => {
-                    if (task.id) updateTask(task as Task);
-                    else addTask(task as Omit<Task, 'id'>);
-                    if (task.dueDate && task.dueType === 'custom') {
-                      const dueDate = new Date(task.dueDate);
-                      dueDate.setHours(0, 0, 0, 0);
-                      setCurrentDate(dueDate);
-                    }
-                    setCustomDueDate(undefined);
-                    fadeOutModal(() => setEditingTask(null));
-                  }}
-                  editingTask={editingTask ? { ...editingTask, note: editingTask.note || '', dueDate: customDueDate || editingTask.dueDate } : undefined}
-                  onCustomDueDate={() => setCalendarVisible(true)}
-                  onDelete={task => {
-                    if (task.id) {
-                      deleteTask(task.id);
-                      setEditingTask(null);
-                      setCustomDueDate(undefined);
-                    }
-                    fadeOutModal(() => setEditingTask(null));
-                  }}
-                />
-              </View>
-            </TouchableWithoutFeedback>
+      {/* Task Form Modal */}
+      <TaskModal
+        visible={!!editingTask || showTaskForm}
+        onClose={() => {
+          setEditingTask(null);
+          setShowTaskForm(false);
+          setCustomDueDate(undefined);
+        }}
+        onSave={(taskData) => {
+          if (taskData.id) {
+            updateTask({
+              id: taskData.id,
+              text: taskData.text,
+              note: taskData.notes,
+              priority: taskData.priority,
+              dueType: taskData.dueDate ? 'custom' : 'none',
+              dueDate: taskData.dueDate || undefined,
+              completed: taskData.completed,
+              subtasks: [],
+              archived: false,
+            });
+          } else {
+            addTask({
+              text: taskData.text,
+              note: taskData.notes,
+              priority: taskData.priority,
+              dueType: taskData.dueDate ? 'custom' : 'none',
+              dueDate: taskData.dueDate || undefined,
+              completed: false,
+              subtasks: [],
+              archived: false,
+            });
+          }
+          setEditingTask(null);
+          setShowTaskForm(false);
+          setCustomDueDate(undefined);
+        }}
+        editingTask={editingTask ? {
+          id: editingTask.id,
+          text: editingTask.text,
+          notes: editingTask.note || '',
+          priority: editingTask.priority,
+          dueDate: editingTask.dueDate || null,
+          reminder: 'none',
+          completed: editingTask.completed,
+        } : null}
+      />
+
+      {/* Task Detail Modal - Placeholder */}
+      {viewingTask && (
+        <View style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+        }}>
+          <View style={{
+            backgroundColor: '#fff',
+            borderRadius: 20,
+            padding: 24,
+            margin: 20,
+            maxWidth: 400,
+          }}>
+            <Text style={{ fontSize: 18, fontWeight: '600', marginBottom: 20 }}>
+              {viewingTask.text}
+            </Text>
+            <Text style={{ color: '#666', marginBottom: 20 }}>
+              Task detail component will be added here
+            </Text>
+            <TouchableOpacity
+              style={{
+                backgroundColor: '#007aff',
+                padding: 12,
+                borderRadius: 8,
+                alignItems: 'center',
+              }}
+              onPress={() => setViewingTask(null)}
+            >
+              <Text style={{ color: '#fff', fontWeight: '600' }}>Close</Text>
+            </TouchableOpacity>
           </View>
-        </Animated.View>
+        </View>
       )}
+      
       <CalendarPopover
         visible={calendarVisible}
         onClose={() => setCalendarVisible(false)}
@@ -621,14 +649,5 @@ const styles = StyleSheet.create({
     marginRight: 0,
     alignSelf: 'center',
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'transparent',
-    justifyContent: 'flex-end',
-  },
-  sheetModalContent: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-  },
+
 }); 

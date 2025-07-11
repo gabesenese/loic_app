@@ -4,14 +4,56 @@ import type { ListRenderItemInfo } from 'react-native';
 import { useTheme } from '../ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { APPLE_COLORS, PRIORITY_COLORS } from '../components/AddEditTaskModal';
-import { TaskForm } from '../components/AddEditTaskModal';
-import AddEditTaskModal from '../components/AddEditTaskModal';
 import * as Haptics from 'expo-haptics';
 import { Profiler } from 'react';
 import type { ProfilerOnRenderCallback } from 'react';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, runOnJS, Easing } from 'react-native-reanimated';
 import { Animated as RNAnimated } from 'react-native';
+
+// Add these at the top, after imports
+
+// TaskForm type
+interface TaskForm {
+  id?: string;
+  text: string;
+  note: string;
+  priority: 'None' | 'Low' | 'Medium' | 'High';
+  dueType: string;
+  dueDate?: string;
+  completed: boolean;
+  subtasks: { id: string; text: string; completed: boolean }[];
+  archived: boolean;
+}
+
+const APPLE_COLORS = {
+  light: {
+    background: '#ffffff',
+    card: '#f2f2f7',
+    text: '#000000',
+    systemBlue: '#007aff',
+    systemGreen: '#34c759',
+    systemOrange: '#ff9500',
+    systemRed: '#ff3b30',
+    systemGray: '#8e8e93',
+  },
+  dark: {
+    background: '#000000',
+    card: '#1c1c1e',
+    text: '#ffffff',
+    systemBlue: '#0a84ff',
+    systemGreen: '#30d158',
+    systemOrange: '#ff9f0a',
+    systemRed: '#ff453a',
+    systemGray: '#8e8e93',
+  }
+};
+
+const PRIORITY_COLORS = {
+  None: { bg: '#f2f2f7', color: '#8e8e93', border: '#e5e5ea' },
+  Low: { bg: '#e9f8ef', color: '#34c759', border: '#b7f5d8' },
+  Medium: { bg: '#fff6e5', color: '#ff9500', border: '#ffe5b2' },
+  High: { bg: '#ffe5e7', color: '#ff3b30', border: '#ffd1d4' },
+};
 
 // Memoized event list component
 interface MemoizedEventListProps {
@@ -732,32 +774,33 @@ export default function CalendarScreen() {
           </Animated.View>
         )}
         {renderBottomBar()}
-        {(showAddTask || !!editingTask) && (
-          <AddEditTaskModal
-            visible={showAddTask || !!editingTask}
-            onClose={handleAddModalClose}
-            onSave={handleTaskSave}
-            onDelete={handleTaskDelete}
-            editingTask={
-              editingTask
-                ? { ...editingTask, note: editingTask.note || '' }
-                : addTaskDate
-                ? {
-                    id: '',
-                    text: '',
-                    note: '',
-                    priority: 'None',
-                    dueType: 'custom',
-                    dueDate: addTaskDate,
-                    completed: false,
-                    subtasks: [],
-                    archived: false,
-                  }
-                : undefined
-            }
-            animationType="slide"
-          />
-        )}
+        {/* Comment out AddEditTaskModal usage */}
+        {/* {(showAddTask || !!editingTask) && (
+            <AddEditTaskModal
+              visible={showAddTask || !!editingTask}
+              onClose={handleAddModalClose}
+              onSave={handleTaskSave}
+              onDelete={handleTaskDelete}
+              editingTask={
+                editingTask
+                  ? { ...editingTask, note: editingTask.note || '' }
+                  : addTaskDate
+                  ? {
+                      id: '',
+                      text: '',
+                      note: '',
+                      priority: 'None',
+                      dueType: 'custom',
+                      dueDate: addTaskDate,
+                      completed: false,
+                      subtasks: [],
+                      archived: false,
+                    }
+                  : undefined
+              }
+              animationType="slide"
+            />
+          )} */}
       </SafeAreaView>
     </Profiler>
   );
