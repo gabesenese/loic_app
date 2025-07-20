@@ -50,10 +50,10 @@ const SettingsRow = ({
     </View>
     <View style={styles.textContainer}>
       <Text style={[styles.rowTitle, { color: isDark ? '#ffffff' : '#000000' }]}>{title}</Text>
-      {subtitle && <Text style={[styles.rowSubtitle, { color: isDark ? '#8e8e93' : '#6b7280' }]}>{subtitle}</Text>}
+      {subtitle ? <Text style={[styles.rowSubtitle, { color: isDark ? '#8e8e93' : '#6b7280' }]}>{subtitle}</Text> : null}
     </View>
-    {rightElement && <View style={styles.rightElement}>{rightElement}</View>}
-    {onPress && <Ionicons name="chevron-forward" size={16} color={isDark ? '#8e8e93' : '#c7c7cc'} style={styles.chevron} />}
+    {rightElement ? <View style={styles.rightElement}>{rightElement}</View> : null}
+    {onPress ? <Ionicons name="chevron-forward" size={16} color={isDark ? '#8e8e93' : '#c7c7cc'} style={styles.chevron} /> : null}
   </TouchableOpacity>
 );
 
@@ -241,7 +241,7 @@ export default function SettingsScreen() {
             rightElement={<AppleToggle value={autoArchive} onValueChange={setAutoArchive} isDark={isDark} />}
             isDark={isDark}
           />
-          {autoArchive && (
+          {autoArchive ? (
             <View style={[styles.archiveInputContainer, { 
               backgroundColor: isDark ? '#1c1c1e' : '#ffffff',
               borderBottomColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'
@@ -263,7 +263,7 @@ export default function SettingsScreen() {
               />
               <Text style={[styles.archiveInputLabel, { color: isDark ? '#8e8e93' : '#6b7280' }]}>days</Text>
             </View>
-          )}
+          ) : null}
         </SettingsSection>
 
         {/* Productivity Section */}

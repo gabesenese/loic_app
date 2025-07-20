@@ -126,17 +126,17 @@ export default function InboxScreen() {
               ]}
             >
               <Text style={[styles.taskText, { color: isDark ? '#fff' : '#222' }]} numberOfLines={2}>{item.text}</Text>
-              {item.subtasks && item.subtasks.length > 0 && !item.completed && (
+              {item.subtasks && item.subtasks.length > 0 && !item.completed ? (
                 <SubtaskIndicator style={styles.subtaskDot} />
-              )}
-              {item.priority && item.priority !== 'None' && (
+              ) : null}
+              {item.priority && item.priority !== 'None' ? (
                 <View style={[styles.priorityBadge, { backgroundColor: PRIORITY_COLORS[item.priority].bg, borderColor: PRIORITY_COLORS[item.priority].border }]}> 
                   <Text style={[styles.priorityBadgeText, { color: PRIORITY_COLORS[item.priority].color }]}>{item.priority}</Text>
                 </View>
-              )}
-              {item.dueDate && (
+              ) : null}
+              {item.dueDate ? (
                 <Text style={[styles.dueDateText, { color: isDark ? '#a5b4fc' : '#64748b' }]}>{new Date(item.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</Text>
-              )}
+              ) : null}
             </TouchableOpacity>
           )}
           ListEmptyComponent={
@@ -151,7 +151,7 @@ export default function InboxScreen() {
       </View>
       
       {/* Task Detail Modal */}
-      {viewTask && (
+      {viewTask ? (
         <TaskModal
           visible={!!viewTask}
           onClose={() => setViewTask(null)}
@@ -160,14 +160,14 @@ export default function InboxScreen() {
         >
           <View style={{ padding: 20 }}>
             <Text style={{ fontSize: 18, fontWeight: '600', marginBottom: 20 }}>
-              {viewTask.text}
+              {viewTask.text || 'Untitled Task'}
             </Text>
             <Text style={{ color: '#666', marginBottom: 20 }}>
               Task detail component will be added here
             </Text>
           </View>
         </TaskModal>
-      )}
+      ) : null}
     </View>
   );
 }

@@ -38,7 +38,7 @@ export default function CalendarPopover({ visible, onClose, onSelectDate }: {
             {days.map((d, i) => d ? (
               <TouchableOpacity
                 key={i}
-                style={[styles.dayCell, d === today.getDate() && month === today.getMonth() && year === today.getFullYear() && styles.today]}
+                style={[styles.dayCell, d === today.getDate() && month === today.getMonth() && year === today.getFullYear() ? styles.today : null]}
                 onPress={() => onSelectDate(new Date(year, month, d).toISOString())}
               >
                 <Text style={styles.dayText}>{d}</Text>

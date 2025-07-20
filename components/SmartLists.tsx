@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Pressable, Text, StyleSheet, ScrollView, Platform } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useTheme } from '../ThemeContext';
-import { PRIORITY_COLORS } from './AddEditTaskModal';
+// PRIORITY_COLORS moved to local definition
 let BlurView: any = null;
 try {
   BlurView = require('expo-blur').BlurView;

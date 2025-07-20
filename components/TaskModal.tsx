@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
 import {
   View,
   Text,
@@ -6,180 +6,401 @@ import {
   TouchableOpacity,
   StyleSheet,
   Modal,
-  Keyboard,
   Platform,
   Dimensions,
   ScrollView,
   Alert,
-} from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withSpring,
-  runOnJS,
+  SafeAreaView,
+  Animated,
+  KeyboardAvoidingView,
+  Keyboard,
   Easing,
-  interpolate,
-  Extrapolate,
-} from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
-import { useTheme } from '../ThemeContext';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { Picker } from '@react-native-picker/picker';
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
+import { useTheme } from "../ThemeContext";
+import DateTimePicker from "@react-native-community/datetimepicker";
 
-const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+
+const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
+const MODAL_HEIGHT = Math.round(screenHeight * 0.65);
 
 // Apple's semantic colors
 const APPLE_COLORS = {
   light: {
-    background: '#ffffff',
-    secondaryBackground: '#f2f2f7',
-    tertiaryBackground: '#e5e5ea',
-    label: '#000000',
-    secondaryLabel: '#3c3c43',
-    tertiaryLabel: '#787880',
-    separator: '#c6c6c8',
-    systemBlue: '#007aff',
-    systemGreen: '#34c759',
-    systemOrange: '#ff9500',
-    systemRed: '#ff3b30',
-    systemGray: '#8e8e93',
-    systemGray2: '#aeaeb2',
-    systemGray3: '#c7c7cc',
-    systemGray4: '#d1d1d6',
-    systemGray5: '#e5e5ea',
-    systemGray6: '#f2f2f7',
+    background: "#ffffff",
+    secondaryBackground: "#f2f2f7",
+    tertiaryBackground: "#e5e5ea",
+    label: "#000000",
+    secondaryLabel: "#3c3c43",
+    tertiaryLabel: "#787880",
+    separator: "#c6c6c8",
+    systemBlue: "#007aff",
+    systemGreen: "#34c759",
+    systemOrange: "#ff9500",
+    systemRed: "#ff3b30",
+    systemGray: "#8e8e93",
+    systemGray2: "#aeaeb2",
+    systemGray3: "#c7c7cc",
+    systemGray4: "#d1d1d6",
+    systemGray5: "#e5e5ea",
+    systemGray6: "#f2f2f7",
   },
   dark: {
-    background: '#000000',
-    secondaryBackground: '#1c1c1e',
-    tertiaryBackground: '#2c2c2e',
-    label: '#ffffff',
-    secondaryLabel: '#ebebf5',
-    tertiaryLabel: '#ebebf599',
-    separator: '#38383a',
-    systemBlue: '#0a84ff',
-    systemGreen: '#30d158',
-    systemOrange: '#ff9f0a',
-    systemRed: '#ff453a',
-    systemGray: '#8e8e93',
-    systemGray2: '#636366',
-    systemGray3: '#48484a',
-    systemGray4: '#3a3a3c',
-    systemGray5: '#2c2c2e',
-    systemGray6: '#1c1c1e',
-  }
+    background: "#000000",
+    secondaryBackground: "#1c1c1e",
+    tertiaryBackground: "#2c2c2e",
+    label: "#ffffff",
+    secondaryLabel: "#ebebf5",
+    tertiaryLabel: "#ebebf599",
+    separator: "#38383a",
+    systemBlue: "#0a84ff",
+    systemGreen: "#30d158",
+    systemOrange: "#ff9f0a",
+    systemRed: "#ff453a",
+    systemGray: "#8e8e93",
+    systemGray2: "#636366",
+    systemGray3: "#48484a",
+    systemGray4: "#3a3a3c",
+    systemGray5: "#2c2c2e",
+    systemGray6: "#1c1c1e",
+  },
 };
 
 const PRIORITY_COLORS = {
-  None: { bg: '#f2f2f7', color: '#8e8e93', border: '#e5e5ea' },
-  Low: { bg: '#e9f8ef', color: '#34c759', border: '#b7f5d8' },
-  Medium: { bg: '#fff6e5', color: '#ff9500', border: '#ffe5b2' },
-  High: { bg: '#ffe5e7', color: '#ff3b30', border: '#ffd1d4' },
+  None: { bg: "#f2f2f7", color: "#8e8e93", border: "#e5e5ea" },
+  Low: { bg: "#e9f8ef", color: "#34c759", border: "#b7f5d8" },
+  Medium: { bg: "#fff6e5", color: "#ff9500", border: "#ffe5b2" },
+  High: { bg: "#ffe5e7", color: "#ff3b30", border: "#ffd1d4" },
 };
 
 const DUE_DATE_OPTIONS = [
-  { key: 'none', label: 'No Due Date', icon: 'calendar-outline' },
-  { key: 'today', label: 'Today', icon: 'today-outline' },
-  { key: 'tomorrow', label: 'Tomorrow', icon: 'calendar-outline' },
-  { key: 'nextWeek', label: 'Next Week', icon: 'calendar-outline' },
-  { key: 'custom', label: 'Custom Date', icon: 'calendar-outline' },
+  { key: "none", label: "No Due Date", icon: "calendar-outline", color: "#b0b0b0" },
+  { key: "today", label: "Today", icon: "calendar", color: "#007aff" },
+  { key: "tomorrow", label: "Tomorrow", icon: "calendar-sharp", color: "#34c759" },
+  { key: "nextWeek", label: "Next Week", icon: "calendar-number-outline", color: "#ff9500" },
+  { key: "custom", label: "Custom Date", icon: "create-outline", color: "#af52de" },
 ];
 
 const PRIORITY_OPTIONS = [
-  { key: 'None', label: 'None', icon: 'ellipse-outline' },
-  { key: 'Low', label: 'Low', icon: 'checkmark-circle-outline' },
-  { key: 'Medium', label: 'Medium', icon: 'remove-circle-outline' },
-  { key: 'High', label: 'High', icon: 'alert-circle-outline' },
+  { key: "None", label: "None", icon: "ellipse-outline" },
+  { key: "Low", label: "Low", icon: "checkmark-circle-outline" },
+  { key: "Medium", label: "Medium", icon: "remove-circle-outline" },
+  { key: "High", label: "High", icon: "alert-circle-outline" },
 ];
 
 const REMINDER_OPTIONS = [
-  { key: 'none', label: 'No Reminder', icon: 'notifications-off-outline' },
-  { key: '5min', label: '5 minutes before', icon: 'time-outline' },
-  { key: '15min', label: '15 minutes before', icon: 'time-outline' },
-  { key: '1hour', label: '1 hour before', icon: 'time-outline' },
-  { key: '1day', label: '1 day before', icon: 'time-outline' },
+  { key: "none", label: "No Reminder", icon: "notifications-off-outline", color: "#b0b0b0" },
+  { key: "5min", label: "5 minutes before", icon: "time-outline", color: "#007aff" },
+  { key: "15min", label: "15 minutes before", icon: "alarm-outline", color: "#34c759" },
+  { key: "1hour", label: "1 hour before", icon: "hourglass-outline", color: "#ff9500" },
+  { key: "1day", label: "1 day before", icon: "calendar-outline", color: "#af52de" },
 ];
 
 interface TaskModalProps {
   visible: boolean;
   onClose: () => void;
-  onSave: (task: TaskData) => void;
+  onSave?: (task: TaskData) => void;
   editingTask?: TaskData | null;
+  title?: string;
+  maxHeight?: number;
+  children?: React.ReactNode;
 }
 
 interface TaskData {
   id?: string;
   text: string;
   notes: string;
-  priority: 'None' | 'Low' | 'Medium' | 'High';
+  priority: "None" | "Low" | "Medium" | "High";
   dueDate: string | null;
   reminder: string;
   completed: boolean;
 }
 
-// Apple-style Settings Row Component
-const SettingsRow = ({ 
-  title, 
-  subtitle, 
-  rightElement, 
-  onPress, 
-  isDark 
-}: { 
-  title: string; 
-  subtitle?: string; 
-  rightElement?: React.ReactNode; 
-  onPress?: () => void; 
-  isDark: boolean; 
-}) => (
-  <TouchableOpacity 
-    style={[
-      styles.settingsRow, 
-      { 
-        backgroundColor: isDark ? '#1c1c1e' : '#ffffff',
-        borderBottomColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'
-      }
-    ]} 
-    onPress={onPress}
-    activeOpacity={0.7}
-    disabled={!onPress}
-  >
-    <View style={styles.textContainer}>
-      <Text style={[styles.rowTitle, { color: isDark ? '#ffffff' : '#000000' }]}>{title}</Text>
-      {subtitle && <Text style={[styles.rowSubtitle, { color: isDark ? '#8e8e93' : '#6b7280' }]}>{subtitle}</Text>}
-    </View>
-    {rightElement && <View style={styles.rightElement}>{rightElement}</View>}
-    {onPress && <Ionicons name="chevron-forward" size={16} color={isDark ? '#8e8e93' : '#c7c7cc'} style={styles.chevron} />}
-  </TouchableOpacity>
-);
+// Clean Pill Component
+const Pill = React.forwardRef<any, any>((props, ref) => {
+  const { title, value, onPress, icon, isDark, showDot = false, dotColor = undefined, pillStyle = {}, valueStyle = {}, iconColor } = props;
+  return (
+    <TouchableOpacity
+      ref={ref}
+      style={[
+        styles.pill,
+        { backgroundColor: isDark ? "#1c1c1e" : "#ffffff" },
+        pillStyle,
+      ]}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <View style={styles.pillLeft}>
+        <Ionicons name={icon as any} size={20} color={iconColor ?? (isDark ? "#8e8e93" : "#6b7280")} />
+        <Text style={[styles.pillTitle, { color: isDark ? "#ffffff" : "#000000" }]}>
+          {title}
+        </Text>
+      </View>
+      <View style={styles.pillRight}>
+        {showDot && dotColor && pillStyle && (
+          <View
+            style={{
+              width: 18,
+              height: 18,
+              borderRadius: 9,
+              backgroundColor: (pillStyle as any).backgroundColor,
+              justifyContent: 'center',
+              alignItems: 'center',
+              marginRight: 8,
+            }}
+          >
+            <View
+              style={{
+                width: 10,
+                height: 10,
+                borderRadius: 5,
+                backgroundColor: dotColor,
+              }}
+            />
+          </View>
+        )}
+        <Text style={[styles.pillValue, { color: isDark ? "#8e8e93" : "#6b7280" }, valueStyle]}>
+          {value}
+        </Text>
+        <Ionicons name="chevron-down" size={16} color={isDark ? "#8e8e93" : "#6b7280"} />
+      </View>
+    </TouchableOpacity>
+  );
+});
 
-// Settings Section Component
-const SettingsSection = ({ title, children, isDark }: { title: string; children: React.ReactNode; isDark: boolean }) => (
-  <View style={styles.settingsSection}>
-    <Text style={[styles.settingsSectionTitle, { color: isDark ? '#8e8e93' : '#8e8e93' }]}>{title}</Text>
-    <View style={[styles.sectionContent, { backgroundColor: isDark ? '#1c1c1e' : '#ffffff' }]}>
-      {children}
-    </View>
-  </View>
-);
+// Clean Dropdown Component
+const Dropdown = ({
+  visible,
+  options,
+  onSelect,
+  onClose,
+  isDark,
+  dropdownAnchorRef,
+  parentRef,
+}: {
+  visible: boolean;
+  options: Array<{ key: string; label: string; icon: string; color?: string }>;
+  onSelect: (key: string) => void;
+  onClose: () => void;
+  isDark: boolean;
+  dropdownAnchorRef: React.RefObject<any>;
+  parentRef: React.RefObject<any>;
+}) => {
+  const [position, setPosition] = useState({ top: 0, left: 0, width: 200 });
+  const slideAnim = useRef(new Animated.Value(-20)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
 
-export default function TaskModal({ 
-  visible, 
-  onClose, 
-  onSave, 
-  editingTask 
+  useLayoutEffect(() => {
+    if (visible && dropdownAnchorRef?.current && parentRef?.current && dropdownAnchorRef.current.measureLayout) {
+      dropdownAnchorRef.current.measureLayout(
+        parentRef.current,
+        (x: number, y: number, width: number, height: number) => {
+          setPosition({ top: y + height, left: x, width });
+        },
+        () => {}
+      );
+    }
+  }, [visible, dropdownAnchorRef, parentRef]);
+
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 180,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 1,
+          duration: 180,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      slideAnim.setValue(-20);
+      opacityAnim.setValue(0);
+    }
+  }, [visible]);
+
+  if (!visible) return null;
+
+  // Check if this is the Priority dropdown
+  const isPriorityDropdown = options.length === 4 && options.some(o => o.key === 'High' && o.icon === 'alert-circle-outline');
+  // In Dropdown, check if this is the Due Date dropdown
+  const isDueDateDropdown = options.length === 5 && options.some(o => o.key === 'custom' && o.icon === 'create-outline');
+  // In Dropdown, check if this is the Reminders dropdown
+  const isRemindersDropdown = options.length === 5 && options.some(o => o.key === '1day' && o.icon === 'calendar-outline');
+
+  return (
+    <TouchableOpacity
+      style={StyleSheet.absoluteFill}
+      activeOpacity={1}
+      onPress={onClose}
+    >
+      <Animated.View
+        style={[
+          styles.dropdownContainer,
+          {
+            position: 'absolute',
+            top: position.top,
+            left: position.left,
+            width: position.width,
+            transform: [{ translateY: slideAnim }],
+            opacity: opacityAnim,
+            zIndex: 1000,
+          },
+          { backgroundColor: isDark ? "#1c1c1e" : "#ffffff" },
+        ]}
+      >
+        {options.map((option) => (
+          <TouchableOpacity
+            key={option.key}
+            style={styles.dropdownOption}
+            onPress={() => {
+              onSelect(option.key);
+              onClose();
+            }}
+          >
+            {/* For Priority dropdown, show icon with colored background */}
+            {isPriorityDropdown ? (
+              <View
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 14,
+                  backgroundColor: PRIORITY_COLORS[option.key as keyof typeof PRIORITY_COLORS].bg,
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  marginRight: 12,
+                }}
+              >
+                <Ionicons
+                  name={option.icon as any}
+                  size={18}
+                  color={PRIORITY_COLORS[option.key as keyof typeof PRIORITY_COLORS].color}
+                />
+              </View>
+            ) : isDueDateDropdown ? (
+              <View
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 14,
+                  backgroundColor: option.color,
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  marginRight: 12,
+                }}
+              >
+                <Ionicons
+                  name={option.icon as any}
+                  size={18}
+                  color={'#fff'}
+                />
+              </View>
+            ) : isRemindersDropdown ? (
+              <View
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 14,
+                  backgroundColor: option.color,
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  marginRight: 12,
+                }}
+              >
+                <Ionicons
+                  name={option.icon as any}
+                  size={18}
+                  color={'#fff'}
+                />
+              </View>
+            ) : (
+              <Ionicons name={option.icon as any} size={20} color={isDark ? "#8e8e93" : "#6b7280"} style={{ marginRight: 12 }} />
+            )}
+            <Text style={[styles.dropdownOptionText, { color: isDark ? "#ffffff" : "#000000" }]}> 
+              {option.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </Animated.View>
+    </TouchableOpacity>
+  );
+};
+
+export default function TaskModal({
+  visible,
+  onClose,
+  onSave,
+  editingTask,
+  title = "New Task",
+  maxHeight,
+  children,
 }: TaskModalProps) {
+  // Safety check for required props
+  if (typeof visible !== "boolean") {
+    console.warn("[TaskModal] Invalid visible prop:", visible);
+    return null;
+  }
+
+  if (typeof onClose !== "function") {
+    console.warn("[TaskModal] Invalid onClose prop:", onClose);
+    return null;
+  }
+
   const { theme } = useTheme();
   const colors = APPLE_COLORS[theme];
-  const isDark = theme === 'dark';
+  const isDark = theme === "dark";
+
+  // Remove keyboard state since we're using KeyboardAvoidingView
+
+  // Safe rendering function for children
+  const renderChildrenSafely = () => {
+    try {
+      if (children === undefined || children === null) {
+        return null;
+      }
+      if (typeof children === "string" || typeof children === "number") {
+        const safeText = String(children);
+        return <Text style={{ color: colors.label }}>{safeText}</Text>;
+      }
+      if (React.isValidElement(children)) {
+        return children;
+      }
+      if (Array.isArray(children)) {
+        return children.map((child, index) => {
+          if (typeof child === "string" || typeof child === "number") {
+            const safeText = String(child);
+            return (
+              <Text key={index} style={{ color: colors.label }}>
+                {safeText}
+              </Text>
+            );
+          }
+          return React.isValidElement(child)
+            ? React.cloneElement(child, { key: index })
+            : null;
+        });
+      }
+      return null;
+    } catch (error) {
+      console.warn("[TaskModal] Error in renderChildrenSafely:", error);
+      return null;
+    }
+  };
 
   // Form state
-  const [taskText, setTaskText] = useState(editingTask?.text || '');
-  const [notes, setNotes] = useState(editingTask?.notes || '');
-  const [priority, setPriority] = useState<TaskData['priority']>(editingTask?.priority || 'None');
-  const [dueDate, setDueDate] = useState<string | null>(editingTask?.dueDate || null);
-  const [reminder, setReminder] = useState(editingTask?.reminder || 'none');
+  const [taskText, setTaskText] = useState(editingTask?.text || "");
+  const [notes, setNotes] = useState(editingTask?.notes || "");
+  const [priority, setPriority] = useState<TaskData["priority"]>(
+    editingTask?.priority || "None"
+  );
+  const [dueDate, setDueDate] = useState<string | null>(
+    editingTask?.dueDate || null
+  );
+  const [reminder, setReminder] = useState(editingTask?.reminder || "none");
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [customDate, setCustomDate] = useState(new Date());
 
@@ -187,18 +408,42 @@ export default function TaskModal({
   const [showDueDateDropdown, setShowDueDateDropdown] = useState(false);
   const [showPriorityDropdown, setShowPriorityDropdown] = useState(false);
   const [showReminderDropdown, setShowReminderDropdown] = useState(false);
-  const [showDueDatePicker, setShowDueDatePicker] = useState(false);
 
   // Animation values
-  const modalOpacity = useSharedValue(0);
-  const modalScale = useSharedValue(0.9);
-  const modalTranslateY = useSharedValue(50);
-  const keyboardHeight = useSharedValue(0);
-  const backdropOpacity = useSharedValue(0);
+  const modalOpacity = useRef(new Animated.Value(0)).current;
+  const modalScale = useRef(new Animated.Value(0.95)).current;
+  const modalTranslateY = useRef(new Animated.Value(20)).current;
+
+  // No manual keyboard animation; rely on KeyboardAvoidingView for Apple-style smoothness
 
   // Refs
   const taskInputRef = useRef<TextInput>(null);
   const notesInputRef = useRef<TextInput>(null);
+  const priorityDropdownRef = useRef<any>(null);
+  const dueDateDropdownRef = useRef<any>(null);
+  const reminderDropdownRef = useRef<any>(null);
+  // In TaskModal, add a ref to the modal content area
+  const modalContentRef = useRef<any>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  // Keyboard handling for automatic scrolling only
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', (event) => {
+      // Keyboard is shown, we'll handle scrolling in onFocus
+    });
+
+    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
+      // Optional: scroll back to top when keyboard hides
+      if (scrollViewRef.current) {
+        scrollViewRef.current.scrollTo({ y: 0, animated: true });
+      }
+    });
+
+    return () => {
+      keyboardDidShowListener?.remove();
+      keyboardDidHideListener?.remove();
+    };
+  }, []);
 
   // Reset form when editing task changes
   useEffect(() => {
@@ -209,92 +454,62 @@ export default function TaskModal({
       setDueDate(editingTask.dueDate);
       setReminder(editingTask.reminder);
     } else {
-      setTaskText('');
-      setNotes('');
-      setPriority('None');
+      setTaskText("");
+      setNotes("");
+      setPriority("None");
       setDueDate(null);
-      setReminder('none');
+      setReminder("none");
     }
   }, [editingTask]);
 
   // Modal animations
   useEffect(() => {
     if (visible) {
-      backdropOpacity.value = withTiming(1, {
-        duration: 300,
-        easing: Easing.bezier(0.4, 0, 0.2, 1),
-      });
-      modalOpacity.value = withTiming(1, {
-        duration: 300,
-        easing: Easing.bezier(0.4, 0, 0.2, 1),
-      });
-      modalScale.value = withSpring(1, {
-        damping: 20,
-        stiffness: 300,
-        mass: 0.8,
-      });
-      modalTranslateY.value = withSpring(0, {
-        damping: 20,
-        stiffness: 300,
-        mass: 0.8,
-      });
+      Animated.parallel([
+        Animated.timing(modalOpacity, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.spring(modalScale, {
+          toValue: 1,
+          damping: 15,
+          stiffness: 150,
+          useNativeDriver: true,
+        }),
+        Animated.spring(modalTranslateY, {
+          toValue: 0,
+          damping: 15,
+          stiffness: 150,
+          useNativeDriver: true,
+        }),
+      ]).start();
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     } else {
-      backdropOpacity.value = withTiming(0, {
-        duration: 250,
-        easing: Easing.bezier(0.4, 0, 0.2, 1),
-      });
-      modalOpacity.value = withTiming(0, {
-        duration: 250,
-        easing: Easing.bezier(0.4, 0, 0.2, 1),
-      });
-      modalScale.value = withTiming(0.9, {
-        duration: 250,
-        easing: Easing.bezier(0.4, 0, 0.2, 1),
-      });
-      modalTranslateY.value = withTiming(50, {
-        duration: 250,
-        easing: Easing.bezier(0.4, 0, 0.2, 1),
-      }, (finished) => {
-        if (finished) runOnJS(onClose)();
-      });
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      Animated.parallel([
+        Animated.timing(modalOpacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(modalScale, {
+          toValue: 0.95,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(modalTranslateY, {
+          toValue: 20,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
     }
-  }, [visible]);
-
-  // Keyboard handling
-  useEffect(() => {
-    const keyboardWillShowListener = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      (e) => {
-        keyboardHeight.value = withTiming(e.endCoordinates.height, {
-          duration: 250,
-          easing: Easing.bezier(0.4, 0, 0.2, 1),
-        });
-      }
-    );
-
-    const keyboardWillHideListener = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      () => {
-        keyboardHeight.value = withTiming(0, {
-          duration: 250,
-          easing: Easing.bezier(0.4, 0, 0.2, 1),
-        });
-      }
-    );
-
-    return () => {
-      keyboardWillShowListener?.remove();
-      keyboardWillHideListener?.remove();
-    };
-  }, []);
+  }, [visible, modalOpacity, modalScale, modalTranslateY]);
 
   const handleDueDateSelect = (option: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setShowDueDateDropdown(false);
-    
-    if (option === 'custom') {
+
+    if (option === "custom") {
       setShowDatePicker(true);
       return;
     }
@@ -303,16 +518,16 @@ export default function TaskModal({
     let selectedDate: Date | null = null;
 
     switch (option) {
-      case 'today':
+      case "today":
         selectedDate = now;
         break;
-      case 'tomorrow':
+      case "tomorrow":
         selectedDate = new Date(now.getTime() + 24 * 60 * 60 * 1000);
         break;
-      case 'nextWeek':
+      case "nextWeek":
         selectedDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
         break;
-      case 'none':
+      case "none":
         selectedDate = null;
         break;
     }
@@ -328,22 +543,20 @@ export default function TaskModal({
     }
   };
 
-  const handlePrioritySelect = (selectedPriority: TaskData['priority']) => {
+  const handlePrioritySelect = (selectedPriority: TaskData["priority"]) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setPriority(selectedPriority);
-    setShowPriorityDropdown(false);
   };
 
   const handleReminderSelect = (selectedReminder: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setReminder(selectedReminder);
-    setShowReminderDropdown(false);
   };
 
   const handleSave = () => {
     if (!taskText.trim()) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert('Task Required', 'Please enter a task title.');
+      Alert.alert("Task Required", "Please enter a task title.");
       return;
     }
 
@@ -357,383 +570,469 @@ export default function TaskModal({
       completed: editingTask?.completed || false,
     };
 
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    onSave(taskData);
-  };
-
-  const formatDueDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-    
-    if (date.toDateString() === now.toDateString()) {
-      return 'Today';
-    } else if (date.toDateString() === tomorrow.toDateString()) {
-      return 'Tomorrow';
-    } else {
-      return date.toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric',
-        year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
-      });
-    }
+    onSave?.(taskData);
+    onClose();
   };
 
   const getSelectedDueDateLabel = () => {
-    if (!dueDate) return 'No Due Date';
-    return formatDueDate(dueDate);
+    if (!dueDate) return "No Due Date";
+    try {
+      const date = new Date(dueDate);
+      const now = new Date();
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      if (date.toDateString() === now.toDateString()) {
+        return "Today";
+      } else if (date.toDateString() === tomorrow.toDateString()) {
+        return "Tomorrow";
+      } else {
+        return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      }
+    } catch (error) {
+      return "No Due Date";
+    }
   };
 
   const getSelectedReminderLabel = () => {
-    const option = REMINDER_OPTIONS.find(opt => opt.key === reminder);
-    return option ? option.label : 'No Reminder';
+    const option = REMINDER_OPTIONS.find((opt) => opt.key === reminder);
+    return option ? option.label : "No Reminder";
   };
 
-  const backdropStyle = useAnimatedStyle(() => ({
-    opacity: backdropOpacity.value,
-  }));
+  const animatedStyle = {
+    opacity: modalOpacity,
+    transform: [
+      { scale: modalScale },
+      { translateY: modalTranslateY },
+    ],
+  };
 
-  const modalStyle = useAnimatedStyle(() => {
-    return {
-      opacity: modalOpacity.value,
-      transform: [
-        { scale: modalScale.value },
-        { translateY: modalTranslateY.value },
-      ],
-    };
-  });
-
-  if (!visible) return null;
+  // Remove height animation to avoid native driver conflicts
+  // We'll use KeyboardAvoidingView instead
 
   return (
     <Modal
       visible={visible}
       transparent
-      animationType="none"
+      animationType="slide"
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <View style={[styles.container, { backgroundColor: isDark ? '#00000099' : '#00000033' }]}> {/* semi-transparent backdrop */}
-        <View style={[styles.modalContainer, { width: '100%' }]}> {/* full width */}
-          <Animated.View
-            style={[
-              styles.modalContent,
-              modalStyle,
-              {
-                backgroundColor: colors.systemGray6, // light gray bg
-                borderRadius: 32,
-                width: '100%',
-                maxWidth: 600,
-                alignSelf: 'center',
-                paddingHorizontal: 0,
-                paddingTop: 0,
-                paddingBottom: 0,
-              },
-            ]}
-          >
-            {/* Minimal header */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 28, paddingBottom: 0 }}>
-              <TouchableOpacity
-                style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }}
-                onPress={onClose}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Ionicons name="close" size={28} color={colors.label} />
-              </TouchableOpacity>
-              <Text style={[styles.title, { color: colors.label, flex: 1, textAlign: 'center', fontWeight: '700', fontSize: 22 }]}>Minimal Modal</Text>
-              <View style={{ width: 44 }} />
-            </View>
-
-            {/* Only one pill row for Due Date */}
-            <View style={{ paddingHorizontal: 28, paddingTop: 24 }}>
-              <TouchableOpacity style={styles.pillRowRedesigned} onPress={() => setShowDueDatePicker((v) => !v)}>
-                <Text style={[styles.pillLabel, { color: colors.label }]}>Due Date</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={[styles.pillValue, { color: colors.secondaryLabel }]}>{getSelectedDueDateLabel()}</Text>
-                  <Ionicons name="chevron-down" size={20} color={colors.secondaryLabel} style={{ marginLeft: 6 }} />
-                </View>
-              </TouchableOpacity>
-              {showDueDatePicker && (
-                <View style={{ backgroundColor: '#fff', borderRadius: 16, marginTop: 8, overflow: 'hidden' }}>
-                  <Picker
-                    selectedValue={dueDate || 'none'}
-                    onValueChange={(itemValue) => {
-                      if (itemValue === 'custom') {
-                        setShowDatePicker(true);
-                        setShowDueDatePicker(false);
-                        return;
-                      }
-                      setDueDate(itemValue === 'none' ? null : itemValue);
-                      setShowDueDatePicker(false);
-                    }}
-                    mode="dropdown"
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+      >
+        <View style={[styles.overlay, { backgroundColor: isDark ? "#00000099" : "#00000033" }]}>
+          <Animated.View style={[styles.bottomSheet, animatedStyle]}>
+            <SafeAreaView style={[styles.headerSafeArea, { backgroundColor: isDark ? "#1c1c1e" : "#ffffff" }]}>
+              <View style={styles.header}>
+                <TouchableOpacity
+                  style={[styles.closeButton, { backgroundColor: isDark ? "#2c2c2e" : "#f2f2f7" }]}
+                  onPress={onClose}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons name="close" size={24} color={isDark ? "#ffffff" : "#000000"} />
+                </TouchableOpacity>
+                <Text style={[styles.headerTitle, { color: isDark ? "#ffffff" : "#000000" }]}>
+                  {editingTask ? "Edit Task" : "New"}
+                </Text>
+                <TouchableOpacity
+                  style={styles.checkmarkButton}
+                  onPress={handleSave}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons name="checkmark" size={24} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            </SafeAreaView>
+            <View style={[styles.contentArea, { flex: 1, backgroundColor: isDark ? "#1c1c1e" : "#ffffff" }]}>
+              <View ref={modalContentRef} style={{ flex: 1 }}>
+                {children !== undefined && children !== null ? (
+                  <View style={styles.childrenContainer}>
+                    {renderChildrenSafely()}
+                  </View>
+                ) : (
+                  <ScrollView
+                    ref={scrollViewRef}
+                    style={[styles.scrollContent, { flex: 1 }]}
+                    contentContainerStyle={{ ...styles.scrollContentContainer, flexGrow: 1 }}
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
                   >
-                    {DUE_DATE_OPTIONS.map((option) => (
-                      <Picker.Item key={option.key} label={option.label} value={option.key} />
-                    ))}
-                  </Picker>
+                {/* Task Input (keep as pill) */}
+                <View style={[
+                  styles.inputContainer,
+                  {
+                    backgroundColor: isDark ? "#1c1c1e" : "#ffffff",
+                    marginBottom: 20,
+                    height: 48,
+                    borderRadius: 24,
+                    borderWidth: 2,
+                    borderColor: '#e3f0ff',
+                    shadowColor: '#007aff',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.12,
+                    shadowRadius: 8,
+                    elevation: 4,
+                  },
+                ]}>
+                  <TextInput
+                    ref={taskInputRef}
+                    style={[
+                      styles.taskInput,
+                      { color: isDark ? "#ffffff" : "#000000", fontWeight: 'bold', fontSize: 16 }
+                    ]}
+                    placeholder="What needs to be done?"
+                    placeholderTextColor={isDark ? "#8e8e93" : "#6b7280"}
+                    value={taskText}
+                    onChangeText={setTaskText}
+                    multiline
+                    textAlignVertical="top"
+                    onFocus={() => {
+                      // Scroll to the top for task input
+                      if (scrollViewRef.current) {
+                        scrollViewRef.current.scrollTo({ y: 0, animated: true });
+                      }
+                    }}
+                  />
                 </View>
-              )}
+                {/* Priority Pill */}
+                <Pill
+                  ref={priorityDropdownRef}
+                  title="Priority"
+                  value={priority}
+                  onPress={() => setShowPriorityDropdown(true)}
+                  icon="flag-outline"
+                  isDark={isDark}
+                  showDot={true}
+                  dotColor={PRIORITY_COLORS[priority].color}
+                  pillStyle={{
+                    backgroundColor: PRIORITY_COLORS[priority].bg,
+                    borderColor: PRIORITY_COLORS[priority].border,
+                    borderWidth: 1,
+                  }}
+                  valueStyle={{ color: PRIORITY_COLORS[priority].color }}
+                  iconColor={PRIORITY_COLORS[priority].color}
+                />
+                {/* Due Date Pill */}
+                <Pill
+                  ref={dueDateDropdownRef}
+                  title="Due Date"
+                  value={getSelectedDueDateLabel()}
+                  onPress={() => setShowDueDateDropdown(true)}
+                  icon="calendar-outline"
+                  isDark={isDark}
+                />
+                {/* Reminder Pill */}
+                <Pill
+                  ref={reminderDropdownRef}
+                  title="Reminder"
+                  value={getSelectedReminderLabel()}
+                  onPress={() => setShowReminderDropdown(true)}
+                  icon="notifications-outline"
+                  isDark={isDark}
+                />
+                {/* Notes Input (move to bottom, not pill) */}
+                <View style={[styles.notesContainer, { backgroundColor: isDark ? "#1c1c1e" : "#ffffff" }]}>
+                  <TextInput
+                    ref={notesInputRef}
+                    style={[styles.notesInput, { color: isDark ? "#ffffff" : "#000000" }]}
+                    placeholder="Add notes..."
+                    placeholderTextColor={isDark ? "#8e8e93" : "#6b7280"}
+                    value={notes}
+                    onChangeText={setNotes}
+                    multiline
+                    textAlignVertical="top"
+                    onFocus={() => {
+                      // Scroll to the bottom to show the notes input above keyboard
+                      if (scrollViewRef.current) {
+                        setTimeout(() => {
+                          scrollViewRef.current?.scrollToEnd({ animated: true });
+                        }, 100); // Small delay to ensure keyboard is shown
+                      }
+                    }}
+                  />
+                </View>
+                  </ScrollView>
+                )}
+              </View>
             </View>
+            {/* Dropdowns */}
+            <Dropdown
+              visible={showPriorityDropdown}
+              options={PRIORITY_OPTIONS}
+              onSelect={(key) => handlePrioritySelect(key as TaskData["priority"])}
+              onClose={() => setShowPriorityDropdown(false)}
+              isDark={isDark}
+              dropdownAnchorRef={priorityDropdownRef}
+              parentRef={modalContentRef}
+            />
+
+            <Dropdown
+              visible={showDueDateDropdown}
+              options={DUE_DATE_OPTIONS}
+              onSelect={handleDueDateSelect}
+              onClose={() => setShowDueDateDropdown(false)}
+              isDark={isDark}
+              dropdownAnchorRef={dueDateDropdownRef}
+              parentRef={modalContentRef}
+            />
+
+            <Dropdown
+              visible={showReminderDropdown}
+              options={REMINDER_OPTIONS}
+              onSelect={handleReminderSelect}
+              onClose={() => setShowReminderDropdown(false)}
+              isDark={isDark}
+              dropdownAnchorRef={reminderDropdownRef}
+              parentRef={modalContentRef}
+            />
+
+            {/* Date Picker */}
+            {showDatePicker ? (
+              <DateTimePicker
+                value={customDate}
+                mode="date"
+                display="default"
+                onChange={handleCustomDateChange}
+              />
+            ) : null}
           </Animated.View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    alignItems: "stretch",
+    backgroundColor: "transparent",
+  },
+  bottomSheet: {
+    width: "100%",
+    height: MODAL_HEIGHT,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    backgroundColor: "#fff",
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 24,
+  },
   container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  backdropAnimated: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  modalContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 1000,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 40,
   },
   modalContent: {
-    width: '100%',
-    maxHeight: screenHeight * 0.7,
-    borderRadius: 20,
-    shadowColor: '#000',
+    maxHeight: "80%",
+    borderRadius: 24,
+    backgroundColor: "transparent",
+    padding: 0,
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 20 },
     shadowOpacity: 0.25,
-    shadowRadius: 25,
-    elevation: 15,
-    flex: 1,
+    shadowRadius: 20,
+    elevation: 20
+  },
+  headerSafeArea: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
   },
   header: {
-    alignItems: 'center',
-    paddingTop: 16,
-    paddingBottom: 12,
-    paddingHorizontal: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    minHeight: 60,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    textAlign: "center",
+    flex: 1,
+  },
+  headerSpacer: {
+    width: 40,
+  },
+  contentArea: {
+    flex: 1,
+    backgroundColor: "transparent",
     position: 'relative',
   },
-  dragHandle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
   closeButton: {
-    position: 'absolute',
-    top: 20,
-    right: 24,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#f2f2f7',
     justifyContent: 'center',
     alignItems: 'center',
+    marginRight: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  childrenContainer: {
+    flex: 1,
+    paddingTop: 20,
   },
   scrollContent: {
     flex: 1,
-    paddingHorizontal: 20,
   },
   scrollContentContainer: {
-    paddingBottom: 20,
+    padding: 24,
+    paddingTop: 20,
+    paddingBottom: 2,
   },
-  section: {
-    marginBottom: 20,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 12,
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 40,
+    borderRadius: 20,
+    marginBottom: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 0,
+    borderWidth: 1,
+    borderColor: '#e5e5ea',
+    backgroundColor: '#fff',
   },
   taskInput: {
-    minHeight: 60,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-    fontSize: 16,
-    borderWidth: 1,
-    textAlignVertical: 'top',
+    fontSize: 15,
+    fontWeight: "600",
+    flex: 1,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    padding: 0,
   },
   notesInput: {
-    minHeight: 80,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
+    fontSize: 15,
+    flex: 1,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    padding: 0,
+  },
+  pill: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    height: 40,
+    borderRadius: 20,
+    marginBottom: 24, // more spacing
+    paddingHorizontal: 20,
+    paddingVertical: 0,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  pillLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  pillTitle: {
     fontSize: 16,
-    borderWidth: 1,
-    textAlignVertical: 'top',
+    fontWeight: "500",
+    marginLeft: 12,
+  },
+  pillRight: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  pillValue: {
+    fontSize: 16,
+    marginRight: 8,
   },
   actionContainer: {
-    flexDirection: 'row',
-    gap: 16,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    paddingTop: 12,
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 24,
   },
   cancelButton: {
     flex: 1,
     height: 50,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
   },
   cancelButtonText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   saveButton: {
     flex: 1,
     height: 50,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
   },
   saveButtonText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
-  // Settings-style components
-  settingsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 0.5,
-  },
-  textContainer: {
-    flex: 1,
-  },
-  rowTitle: {
-    fontSize: 16,
-    fontWeight: '400',
-    marginBottom: 2,
-  },
-  rowSubtitle: {
-    fontSize: 14,
-    fontWeight: '400',
-  },
-  rightElement: {
-    marginRight: 8,
-  },
-  chevron: {
-    marginLeft: 8,
-  },
-  settingsSection: {
-    marginBottom: 32,
-  },
-  settingsSectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 8,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-    opacity: 0.6,
-  },
-  sectionContent: {
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  priorityIndicator: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  // Dropdown styles
   dropdownBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   dropdownContainer: {
-    width: '80%',
-    maxWidth: 300,
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
+    width: "70%",
+    maxWidth: 220,
+    borderRadius: 16,
+    padding: 8,
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.25,
     shadowRadius: 20,
-    elevation: 15,
-  },
-  dropdownTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 16,
-    textAlign: 'center',
+    elevation: 20,
   },
   dropdownOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    marginBottom: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
-  },
-  dropdownIcon: {
-    marginRight: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    marginBottom: 4,
   },
   dropdownOptionText: {
-    fontSize: 16,
-    fontWeight: '400',
+    fontSize: 15,
+    fontWeight: "400",
+    marginLeft: 8,
   },
-  pillRow: {
-    flexDirection: 'row',
+  checkmarkButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#ff3b30', // iOS system red
+    justifyContent: 'center',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    marginBottom: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    minHeight: 48,
-    shadowColor: 'rgba(0,0,0,0.03)',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 1,
-    shadowRadius: 2,
-  },
-  pillRowRedesigned: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#fff',
-    borderRadius: 22,
-    marginBottom: 20,
-    paddingHorizontal: 20,
-    paddingVertical: 18,
-    minHeight: 56,
-    shadowColor: 'rgba(0,0,0,0.06)',
+    marginLeft: 8,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 4,
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 3,
   },
-  pillLabel: {
-    fontSize: 16,
-    fontWeight: '500',
+  // Add a new style for notesContainer
+  notesContainer: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e5e5ea',
+    padding: 12,
+    marginTop: 24,
+    backgroundColor: '#fff',
   },
-  pillValue: {
-    fontSize: 16,
-    fontWeight: '400',
-  },
-  pillInput: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '400',
-    paddingVertical: 0,
-    paddingHorizontal: 0,
-    backgroundColor: 'transparent',
-    borderWidth: 0,
-  },
-}); 
+});

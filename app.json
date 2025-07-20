@@ -32,11 +32,7 @@
     "plugins": [
       "expo-notifications"
     ],
-    "extra": {
-      "eas": {
-        "projectId": "0094f027-18dd-4070-ad60-4cc30795b5f4"
-      }
-    },
+    "extra": {},
     "owner": "gabesenese"
   }
 }

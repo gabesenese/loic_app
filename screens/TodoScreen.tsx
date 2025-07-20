@@ -39,25 +39,77 @@ const PRIORITY_COLORS = {
 };
 
 function renderRightActions(progress: any, dragX: any, onDelete: () => void) {
-  const scale = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.8, 1],
-    extrapolate: 'clamp',
-  });
+  try {
+    // Smooth scale animation
+    const scale = progress.interpolate({
+      inputRange: [0, 0.2, 1],
+      outputRange: [0.8, 1, 1],
+      extrapolate: 'clamp',
+    });
 
-  const opacity = progress.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [0, 0.8, 1],
-    extrapolate: 'clamp',
-  });
+    // Smooth opacity animation
+    const opacity = progress.interpolate({
+      inputRange: [0, 0.15, 1],
+      outputRange: [0, 1, 1],
+      extrapolate: 'clamp',
+    });
 
-  return (
-    <Animated.View style={[styles.deleteButton, { opacity, transform: [{ scale }] }]}>
-      <TouchableOpacity onPress={onDelete} style={styles.deleteButtonTouchable}>
-        <Ionicons name="trash" size={24} color="#c62828" />
-      </TouchableOpacity>
-    </Animated.View>
-  );
+    // Slide in animation from right
+    const translateX = progress.interpolate({
+      inputRange: [0, 0.3, 1],
+      outputRange: [80, 20, 0],
+      extrapolate: 'clamp',
+    });
+
+    // Border radius animation - starts rounded and becomes more rounded as it merges
+    const borderRadius = progress.interpolate({
+      inputRange: [0, 0.5, 1],
+      outputRange: [20, 12, 10],
+      extrapolate: 'clamp',
+    });
+
+    // Ensure all values are numbers
+    const scaleValue = typeof scale === 'number' ? scale : 1;
+    const opacityValue = typeof opacity === 'number' ? opacity : 1;
+    const translateXValue = typeof translateX === 'number' ? translateX : 0;
+    const borderRadiusValue = typeof borderRadius === 'number' ? borderRadius : 10;
+
+    return (
+      <Animated.View 
+        style={[
+          styles.deleteButton, 
+          { 
+            opacity: opacityValue, 
+            transform: [
+              { scale: scaleValue },
+              { translateX: translateXValue }
+            ],
+            borderRadius: borderRadiusValue,
+          }
+        ]}
+      >
+        <TouchableOpacity 
+          onPress={onDelete} 
+          style={[
+            styles.deleteButtonTouchable,
+            { borderRadius: borderRadiusValue }
+          ]}
+        >
+          <Ionicons name="trash" size={24} color="#d32f2f" />
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  } catch (error) {
+    console.warn('[TodoScreen] Error in renderRightActions:', error);
+    // Fallback to static values
+    return (
+      <Animated.View style={[styles.deleteButton, { opacity: 1, transform: [{ scale: 1 }] }]}>
+        <TouchableOpacity onPress={onDelete} style={styles.deleteButtonTouchable}>
+          <Ionicons name="trash" size={24} color="#d32f2f" />
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  }
 }
 
 function isToday(dateStr?: string) {
@@ -132,22 +184,36 @@ function getHeaderDateLabel(date: Date) {
 }
 
 export function formatDateForDisplay(dateString: string): string {
-  const date = new Date(dateString);
-  const month = date.toLocaleDateString('en-US', { month: 'long' });
-  const day = date.getDate();
-  
-  // Add ordinal suffix to day
-  const getOrdinalSuffix = (day: number) => {
-    if (day > 3 && day < 21) return 'th';
-    switch (day % 10) {
-      case 1: return 'st';
-      case 2: return 'nd';
-      case 3: return 'rd';
-      default: return 'th';
+  try {
+    if (!dateString) return '';
+    
+    const date = new Date(dateString);
+    
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      console.warn('[TodoScreen] Invalid date string:', dateString);
+      return '';
     }
-  };
-  
-  return `${month} ${day}${getOrdinalSuffix(day)}`;
+    
+    const month = date.toLocaleDateString('en-US', { month: 'long' });
+    const day = date.getDate();
+    
+    // Add ordinal suffix to day
+    const getOrdinalSuffix = (day: number) => {
+      if (day > 3 && day < 21) return 'th';
+      switch (day % 10) {
+        case 1: return 'st';
+        case 2: return 'nd';
+        case 3: return 'rd';
+        default: return 'th';
+      }
+    };
+    
+    return `${month} ${day}${getOrdinalSuffix(day)}`;
+  } catch (error) {
+    console.warn('[TodoScreen] Error in formatDateForDisplay:', error);
+    return '';
+  }
 }
 
 const AnimatedCheckMark = ({ completed, color }: { completed: boolean, color: string }) => {
@@ -155,12 +221,15 @@ const AnimatedCheckMark = ({ completed, color }: { completed: boolean, color: st
   React.useEffect(() => {
     scale.value = withTiming(completed ? 1 : 0, { duration: 300 });
   }, [completed]);
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 0.2 + 0.8 * scale.value }],
-  }));
+  const animatedStyle = useAnimatedStyle(() => {
+    const scaleValue = typeof scale.value === 'number' ? scale.value : 0;
+    return {
+      transform: [{ scale: 0.2 + 0.8 * scaleValue }],
+    };
+  });
   return (
     <Animated.View style={animatedStyle}>
-      {completed && <Text style={{ color, fontWeight: 'bold' }}>✓</Text>}
+      {completed ? <Text style={{ color, fontWeight: 'bold' }}>✓</Text> : null}
     </Animated.View>
   );
 };
@@ -188,7 +257,7 @@ const TaskList = ({ tasks, onToggle, onEdit, onDelete, onView }: { tasks: Task[]
               onPress={() => onView(item)}
               activeOpacity={0.8}
             >
-              <TouchableOpacity onPress={() => onToggle(item.id)} style={[styles.checkCircle, item.completed && styles.checkCircleCompleted, { borderColor: isDark ? '#3b82f6' : '#3b82f6', backgroundColor: item.completed ? (isDark ? '#3b82f6' : '#3b82f6') : 'transparent' }] }>
+              <TouchableOpacity onPress={() => onToggle(item.id)} style={[styles.checkCircle, item.completed ? styles.checkCircleCompleted : null, { borderColor: isDark ? '#3b82f6' : '#3b82f6', backgroundColor: item.completed ? (isDark ? '#3b82f6' : '#3b82f6') : 'transparent' }] }>
                 <AnimatedCheckMark completed={item.completed} color={isDark ? '#fff' : '#fff'} />
               </TouchableOpacity>
               <TouchableOpacity 
@@ -196,18 +265,22 @@ const TaskList = ({ tasks, onToggle, onEdit, onDelete, onView }: { tasks: Task[]
                 onPress={() => onView(item)}
                 onLongPress={() => onEdit(item)}
               >
-                <Text style={[styles.taskText, item.completed && styles.taskTextCompleted, { color: isDark ? '#fff' : '#222' }]}>{item.text}</Text>
+                <Text style={[styles.taskText, item.completed ? styles.taskTextCompleted : null, { color: isDark ? '#fff' : '#222' }]}>{item.text}</Text>
               </TouchableOpacity>
               {/* Subtask indicator: small green dot if subtasks exist */}
-              {item.subtasks && item.subtasks.length > 0 && !item.completed && (
+              {item.subtasks && item.subtasks.length > 0 && !item.completed ? (
                 <SubtaskIndicator style={styles.subtaskDot} />
-              )}
-              {item.priority && item.priority !== 'None' && (
+              ) : null}
+              {item.priority && item.priority !== 'None' ? (
                 <View style={[styles.priorityBadge, { backgroundColor: PRIORITY_COLORS[item.priority].bg, borderColor: PRIORITY_COLORS[item.priority].border }]}> 
                   <Text style={[styles.priorityBadgeText, { color: PRIORITY_COLORS[item.priority].color }]}>{item.priority}</Text>
                 </View>
-              )}
-              <Text style={[styles.dueDateText, { color: isDark ? '#a5b4fc' : '#64748b' }]}>{formatDateForDisplay(item.dueDate || new Date().toISOString())}</Text>
+              ) : null}
+              {item.dueDate ? (
+                <Text style={[styles.dueDateText, { color: isDark ? '#a5b4fc' : '#64748b' }]}>
+                  {formatDateForDisplay(item.dueDate)}
+                </Text>
+              ) : null}
             </TouchableOpacity>
           </Swipeable>
         )}
@@ -244,7 +317,12 @@ const AddTaskModal = ({ visible, onClose, onAdd }: { visible: boolean, onClose: 
 
 const SettingsModal = ({ visible, onClose }: { visible: boolean, onClose: () => void }) => (
   <Modal visible={visible} animationType="slide" transparent>
-    <View style={styles.modal}><Text>Settings Modal</Text><TouchableOpacity onPress={onClose}><Text>Close</Text></TouchableOpacity></View>
+    <View style={styles.modal}>
+      <Text>Settings Modal</Text>
+      <TouchableOpacity onPress={onClose}>
+        <Text>Close</Text>
+      </TouchableOpacity>
+    </View>
   </Modal>
 );
 
@@ -627,18 +705,16 @@ const styles = StyleSheet.create({
   deleteButton: {
     justifyContent: 'center',
     alignItems: 'center',
-    width: 60,
-    height: 60,
-    borderRadius: 12,
-    marginLeft: 1,
+    width: 80,
+    backgroundColor: '#ffebee', // Light red background for delete button
+    marginBottom: 8, // Match the task item margin
   },
   deleteButtonTouchable: {
     justifyContent: 'center',
     alignItems: 'center',
-    width: 60,
-    height: 60,
-    borderRadius: 12,
-    marginLeft: 1,
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#ffebee', // Light red background for touchable area
   },
   subtaskDot: {
     width: 9,

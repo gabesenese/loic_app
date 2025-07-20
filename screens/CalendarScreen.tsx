@@ -181,7 +181,7 @@ const DayCell = memo(({ cell, isTodayDate, dayTasks, handlePress, isHighlighted 
           ]}>
             <Text style={[
               styles.dayNumber,
-              isTodayDate && styles.todayNumber,
+              isTodayDate ? styles.todayNumber : null,
               { color: isTodayDate ? '#fff' : theme === 'dark' ? '#fff' : '#222' }
             ]}>
               {parseInt(cell.date.slice(-2), 10)}
@@ -194,7 +194,7 @@ const DayCell = memo(({ cell, isTodayDate, dayTasks, handlePress, isHighlighted 
                 style={[
                   styles.eventDot,
                   { backgroundColor: PRIORITY_COLORS[task.priority as keyof typeof PRIORITY_COLORS].bg },
-                  idx === 2 && dayTasks.length > 3 && styles.eventDotOverflow
+                  idx === 2 && dayTasks.length > 3 ? styles.eventDotOverflow : null
                 ]}
               />
             ))}
