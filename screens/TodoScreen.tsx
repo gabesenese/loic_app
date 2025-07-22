@@ -620,13 +620,14 @@ const styles = StyleSheet.create({
   cancelBtn: { padding: 12 },
   saveBtn: { padding: 12, backgroundColor: '#3b82f6', borderRadius: 8 },
   taskItem: { flexDirection: 'row', alignItems: 'center', padding: 14, borderBottomWidth: 1, borderColor: '#eee', borderRadius: 10, marginBottom: 8, backgroundColor: '#fafbfc', elevation: 1 },
-  checkCircle: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: '#3b82f6', justifyContent: 'center', alignItems: 'center', marginRight: 14 },
+  checkCircle: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: '#3b82f6', justifyContent: 'center', alignItems: 'center', marginRight: 14 },
   checkCircleCompleted: { backgroundColor: '#3b82f6' },
   checkMark: { color: '#fff', fontWeight: 'bold' },
   taskText: { 
     flex: 1, 
     fontSize: 17,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro' : undefined,
+    marginTop: 4, // Lower the text a bit
   },
   taskTextCompleted: { 
     textDecorationLine: 'line-through', 
