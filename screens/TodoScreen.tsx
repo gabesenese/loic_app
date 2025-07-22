@@ -254,7 +254,6 @@ const TaskList = ({ tasks, onToggle, onEdit, onDelete, onView }: { tasks: Task[]
           >
             <TouchableOpacity
               style={[styles.taskItem, { backgroundColor: isDark ? '#23232a' : '#fafbfc', borderColor: isDark ? '#333' : '#eee' }]}
-              onPress={() => onView(item)}
               activeOpacity={0.8}
             >
               <TouchableOpacity onPress={() => onToggle(item.id)} style={[styles.checkCircle, item.completed ? styles.checkCircleCompleted : null, { borderColor: isDark ? '#3b82f6' : '#3b82f6', backgroundColor: item.completed ? (isDark ? '#3b82f6' : '#3b82f6') : 'transparent' }] }>
@@ -262,7 +261,6 @@ const TaskList = ({ tasks, onToggle, onEdit, onDelete, onView }: { tasks: Task[]
               </TouchableOpacity>
               <TouchableOpacity 
                 style={{ flex: 1 }}
-                onPress={() => onView(item)}
                 onLongPress={() => onEdit(item)}
               >
                 <Text style={[styles.taskText, item.completed ? styles.taskTextCompleted : null, { color: isDark ? '#fff' : '#222' }]}>{item.text}</Text>

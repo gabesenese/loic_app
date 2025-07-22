@@ -101,7 +101,7 @@ const styles = StyleSheet.create({
   outerContainer: {
     marginBottom: 20,
     paddingTop: 8,
-    paddingHorizontal: 16,
+    paddingHorizontal: 0, // Remove horizontal padding for edge-to-edge
   },
   scrollContainer: {
     flexDirection: 'row',
