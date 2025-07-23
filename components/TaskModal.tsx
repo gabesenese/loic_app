@@ -108,7 +108,7 @@ interface TaskModalProps {
   children?: React.ReactNode;
 }
 
-interface TaskData {
+export interface TaskData {
   id?: string;
   text: string;
   notes: string;

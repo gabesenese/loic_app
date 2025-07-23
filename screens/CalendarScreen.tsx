@@ -9,6 +9,7 @@ import { Profiler } from 'react';
 import type { ProfilerOnRenderCallback } from 'react';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, runOnJS, Easing } from 'react-native-reanimated';
 import { Animated as RNAnimated } from 'react-native';
+import TaskModal, { TaskData } from '../components/TaskModal';
 
 // Add these at the top, after imports
 
@@ -161,18 +162,19 @@ function useDoubleTap(callback: () => void, delay = 250) {
 }
 
 // Memoized DayCell component
-const DayCell = memo(({ cell, isTodayDate, dayTasks, handlePress, isHighlighted }: {
+const DayCell = memo(({ cell, isTodayDate, dayTasks, handlePress, handleLongPress, isHighlighted }: {
   cell: { date: string; isCurrentMonth: boolean };
   isTodayDate: boolean;
-  dayTasks: Task[];
+  dayTasks: any[];
   handlePress: () => void;
+  handleLongPress: () => void;
   isHighlighted: boolean;
 }) => {
   const { theme } = useTheme();
   const colors = APPLE_COLORS[theme];
   return (
     <View style={styles.dayCellWrap}>
-      <TouchableWithoutFeedback onPress={handlePress}>
+      <TouchableWithoutFeedback onPress={handlePress} onLongPress={handleLongPress}>
         <View style={styles.dayCellTouchable}>
           <View style={[
             styles.dayCircle,
@@ -209,7 +211,7 @@ const DayCell = memo(({ cell, isTodayDate, dayTasks, handlePress, isHighlighted 
 });
 
 // Memoized MonthGrid component
-const MonthGrid = memo(({ days, firstDayOfWeek, numRows, getTasksForDate, isToday, handleDayPress, highlightedDate, theme }: any) => {
+const MonthGrid = memo(({ days, firstDayOfWeek, numRows, getTasksForDate, isToday, handleDayPress, highlightedDate, theme, setTaskModalDate, setTaskModalEditingTask, setShowTaskModal }: any) => {
   const grid: ({ date: string; isCurrentMonth: boolean } | null)[] = Array(numRows * 7).fill(null);
   for (let i = 0; i < days.length; i++) {
     grid[firstDayOfWeek + i] = days[i];
@@ -258,6 +260,18 @@ const MonthGrid = memo(({ days, firstDayOfWeek, numRows, getTasksForDate, isToda
                     isTodayDate={isTodayDate}
                     dayTasks={dayTasks}
                     handlePress={() => handleDayPress(cell.date)}
+                    handleLongPress={() => {
+                      setTaskModalDate(cell.date);
+                      setTaskModalEditingTask({
+                        text: '',
+                        notes: '',
+                        priority: 'None',
+                        dueDate: cell.date,
+                        reminder: 'none',
+                        completed: false,
+                      });
+                      setShowTaskModal(true);
+                    }}
                     isHighlighted={highlightedDate === cell.date && !isTodayDate}
                   />
                 );
@@ -273,6 +287,11 @@ const MonthGrid = memo(({ days, firstDayOfWeek, numRows, getTasksForDate, isToda
 export default function CalendarScreen() {
   const { theme } = useTheme();
   const colors = APPLE_COLORS[theme];
+
+  // Declare all modal/task modal state at the top
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [taskModalDate, setTaskModalDate] = useState<string | null>(null);
+  const [taskModalEditingTask, setTaskModalEditingTask] = useState<any>(null);
   
   // Declare pendingDate state at the top so it's available everywhere
   const [pendingDate, setPendingDate] = useState<string | null>(null);
@@ -586,6 +605,7 @@ export default function CalendarScreen() {
     </>
   ), [weekdaysRowStyle, weekdayTextStyle]);
 
+  // In renderMonth, pass modal state setters to MonthGrid
   const renderMonth = useCallback(({ item }: ListRenderItemInfo<{ year: number; month: number }>) => {
     const days = getMonthMatrix(item.year, item.month);
     const firstDayOfWeek = getFirstDayOfWeek(item.year, item.month);
@@ -600,6 +620,9 @@ export default function CalendarScreen() {
         handleDayPress={handleDayPress}
         highlightedDate={highlightedDate}
         theme={theme}
+        setTaskModalDate={setTaskModalDate}
+        setTaskModalEditingTask={setTaskModalEditingTask}
+        setShowTaskModal={setShowTaskModal}
       />
     );
   }, [getTasksForDate, handleDayPress, highlightedDate, theme]);
@@ -690,6 +713,35 @@ export default function CalendarScreen() {
     }
   }, [showDayDetailModal]);
 
+  // Handler for saving a new task from TaskModal
+  const handleTaskModalSave = (task: TaskData) => {
+    // Convert TaskData to Task
+    setTasks(prev => [
+      {
+        id: Date.now().toString(),
+        text: task.text,
+        note: task.notes || '',
+        priority: task.priority,
+        dueType: 'custom',
+        dueDate: task.dueDate || '',
+        completed: false,
+        subtasks: [],
+        archived: false,
+      },
+      ...prev
+    ]);
+    setShowTaskModal(false);
+    setTaskModalDate(null);
+    setTaskModalEditingTask(null);
+  };
+
+  // Handler for closing TaskModal
+  const handleTaskModalClose = () => {
+    setShowTaskModal(false);
+    setTaskModalDate(null);
+    setTaskModalEditingTask(null);
+  };
+
   return (
     <Profiler id="CalendarScreen" onRender={onRenderCallback}>
       <SafeAreaView style={[styles.container, { backgroundColor: theme === 'dark' ? '#000' : colors.background, flex: 1 }]}>  
@@ -773,6 +825,15 @@ export default function CalendarScreen() {
             </TouchableWithoutFeedback>
           </Animated.View>
         )}
+        {/* Add TaskModal for long press on day */}
+        <TaskModal
+          visible={showTaskModal}
+          onClose={handleTaskModalClose}
+          onSave={handleTaskModalSave}
+          editingTask={taskModalEditingTask}
+          title={taskModalEditingTask ? 'Edit Task' : 'New Task'}
+          maxHeight={420}
+        />
         {renderBottomBar()}
         {/* Comment out AddEditTaskModal usage */}
         {/* {(showAddTask || !!editingTask) && (
