@@ -32,10 +32,22 @@ const ARCHIVE_DAYS_KEY = 'ARCHIVE_DAYS';
 
 // Priority colors for compatibility
 const PRIORITY_COLORS = {
-  None: { bg: '#F2F2F7', color: '#C7C7CC', border: '#E5E5EA' },
-  Low: { bg: '#E9F8EF', color: '#34C759', border: '#B7F5D8' },
-  Medium: { bg: '#FFF6E5', color: '#FF9500', border: '#FFE5B2' },
-  High: { bg: '#FFE5E7', color: '#FF3B30', border: '#FFD1D4' },
+  None: {
+    light: { bg: "#f2f2f7", color: "#8e8e93", border: "#e5e5ea" },
+    dark: { bg: "#23232b", color: "#8e8e93", border: "#353542" }
+  },
+  Low: {
+    light: { bg: "#e9f8ef", color: "#34c759", border: "#b7f5d8" },
+    dark: { bg: "#19392b", color: "#30d158", border: "#295c44" }
+  },
+  Medium: {
+    light: { bg: "#fff6e5", color: "#ff9500", border: "#ffe5b2" },
+    dark: { bg: "#3a2a13", color: "#ff9f0a", border: "#5c4420" }
+  },
+  High: {
+    light: { bg: "#ffe5e7", color: "#ff3b30", border: "#ffd1d4" },
+    dark: { bg: "#3a191b", color: "#ff453a", border: "#5c292c" }
+  }
 };
 
 function renderRightActions(progress: any, dragX: any, onDelete: () => void) {
@@ -75,11 +87,11 @@ function renderRightActions(progress: any, dragX: any, onDelete: () => void) {
     const borderRadiusValue = typeof borderRadius === 'number' ? borderRadius : 10;
 
     return (
-      <Animated.View 
+      <Animated.View
         style={[
-          styles.deleteButton, 
-          { 
-            opacity: opacityValue, 
+          styles.deleteButton,
+          {
+            opacity: opacityValue,
             transform: [
               { scale: scaleValue },
               { translateX: translateXValue }
@@ -88,8 +100,8 @@ function renderRightActions(progress: any, dragX: any, onDelete: () => void) {
           }
         ]}
       >
-        <TouchableOpacity 
-          onPress={onDelete} 
+        <TouchableOpacity
+          onPress={onDelete}
           style={[
             styles.deleteButtonTouchable,
             { borderRadius: borderRadiusValue }
@@ -150,7 +162,7 @@ function isTaskForDate(task: Task, targetDate: Date): boolean {
     today.setHours(0, 0, 0, 0);
     return targetDate.getTime() === today.getTime();
   }
-  
+
   // If task has a due date, check if it matches the target date
   const taskDate = new Date(task.dueDate);
   taskDate.setHours(0, 0, 0, 0);
@@ -161,13 +173,13 @@ function filterTasks(tasks: Task[], smartList: string): Task[] {
   if (smartList === 'archive') return tasks.filter(t => t.archived);
   return tasks.filter(t => !t.archived && (
     smartList === 'all' ? true :
-    smartList === 'important' ? t.priority === 'High' :
-    smartList === 'today' ? isToday(t.dueDate) :
-    smartList === 'tomorrow' ? isTomorrow(t.dueDate) :
-    smartList === 'work' ? t.category === 'work' :
-    smartList === 'personal' ? t.category === 'personal' :
-    smartList === 'week' ? isThisWeek(t.dueDate) :
-    true
+      smartList === 'important' ? t.priority === 'High' :
+        smartList === 'today' ? isToday(t.dueDate) :
+          smartList === 'tomorrow' ? isTomorrow(t.dueDate) :
+            smartList === 'work' ? t.category === 'work' :
+              smartList === 'personal' ? t.category === 'personal' :
+                smartList === 'week' ? isThisWeek(t.dueDate) :
+                  true
   ));
 }
 
@@ -186,18 +198,18 @@ function getHeaderDateLabel(date: Date) {
 export function formatDateForDisplay(dateString: string): string {
   try {
     if (!dateString) return '';
-    
+
     const date = new Date(dateString);
-    
+
     // Check if date is valid
     if (isNaN(date.getTime())) {
       console.warn('[TodoScreen] Invalid date string:', dateString);
       return '';
     }
-    
+
     const month = date.toLocaleDateString('en-US', { month: 'long' });
     const day = date.getDate();
-    
+
     // Add ordinal suffix to day
     const getOrdinalSuffix = (day: number) => {
       if (day > 3 && day < 21) return 'th';
@@ -208,7 +220,7 @@ export function formatDateForDisplay(dateString: string): string {
         default: return 'th';
       }
     };
-    
+
     return `${month} ${day}${getOrdinalSuffix(day)}`;
   } catch (error) {
     console.warn('[TodoScreen] Error in formatDateForDisplay:', error);
@@ -256,10 +268,10 @@ const TaskList = ({ tasks, onToggle, onEdit, onDelete, onView }: { tasks: Task[]
               style={[styles.taskItem, { backgroundColor: isDark ? '#23232a' : '#fafbfc', borderColor: isDark ? '#333' : '#eee' }]}
               activeOpacity={0.8}
             >
-              <TouchableOpacity onPress={() => onToggle(item.id)} style={[styles.checkCircle, item.completed ? styles.checkCircleCompleted : null, { borderColor: isDark ? '#3b82f6' : '#3b82f6', backgroundColor: item.completed ? (isDark ? '#3b82f6' : '#3b82f6') : 'transparent' }] }>
+              <TouchableOpacity onPress={() => onToggle(item.id)} style={[styles.checkCircle, item.completed ? styles.checkCircleCompleted : null, { borderColor: isDark ? '#3b82f6' : '#3b82f6', backgroundColor: item.completed ? (isDark ? '#3b82f6' : '#3b82f6') : 'transparent' }]}>
                 <AnimatedCheckMark completed={item.completed} color={isDark ? '#fff' : '#fff'} />
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={{ flex: 1 }}
                 onLongPress={() => onEdit(item)}
               >
@@ -270,8 +282,13 @@ const TaskList = ({ tasks, onToggle, onEdit, onDelete, onView }: { tasks: Task[]
                 <SubtaskIndicator style={styles.subtaskDot} />
               ) : null}
               {item.priority && item.priority !== 'None' ? (
-                <View style={[styles.priorityBadge, { backgroundColor: PRIORITY_COLORS[item.priority].bg, borderColor: PRIORITY_COLORS[item.priority].border }]}> 
-                  <Text style={[styles.priorityBadgeText, { color: PRIORITY_COLORS[item.priority].color }]}>{item.priority}</Text>
+                <View style={[styles.priorityBadge, {
+                  backgroundColor: PRIORITY_COLORS[item.priority][isDark ? "dark" : "light"].bg,
+                  borderColor: PRIORITY_COLORS[item.priority][isDark ? "dark" : "light"].border,
+                },
+                ]}>
+                  <Text style={[styles.priorityBadgeText, { 
+                    color: PRIORITY_COLORS[item.priority][isDark ? "dark" : "light"].color }]}>{item.priority}</Text>
                 </View>
               ) : null}
               {item.dueDate ? (
@@ -305,7 +322,7 @@ const AddTaskModal = ({ visible, onClose, onAdd }: { visible: boolean, onClose: 
           />
           <View style={styles.modalActions}>
             <TouchableOpacity onPress={onClose} style={styles.cancelBtn}><Text>Cancel</Text></TouchableOpacity>
-            <TouchableOpacity onPress={() => { if (text.trim()) { onAdd(text.trim()); setText(''); onClose(); }}} style={styles.saveBtn}><Text style={{ color: '#fff' }}>Add</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => { if (text.trim()) { onAdd(text.trim()); setText(''); onClose(); } }} style={styles.saveBtn}><Text style={{ color: '#fff' }}>Add</Text></TouchableOpacity>
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -350,12 +367,12 @@ export default function TodoScreen({ smartList = 'all' }: { smartList?: string }
     AsyncStorage.getItem(STORAGE_KEY).then((data: string | null) => {
       if (data) setTasks(JSON.parse(data));
     });
-    
+
     // Load auto archive settings
     AsyncStorage.getItem(AUTO_ARCHIVE_KEY).then(val => {
       if (val !== null) setAutoArchive(val === 'true');
     });
-    
+
     AsyncStorage.getItem(ARCHIVE_DAYS_KEY).then(val => {
       if (val !== null) {
         const days = parseInt(val, 10);
@@ -405,10 +422,10 @@ export default function TodoScreen({ smartList = 'all' }: { smartList?: string }
   filteredTasks = filteredTasks.filter(t => isTaskForDate(t, currentDate));
   const headerTitle =
     smartList === 'all' ? 'All Tasks' :
-    smartList === 'today' ? 'Today' :
-    smartList === 'important' ? 'Important' :
-    smartList === 'week' ? 'This Week' :
-    smartList.charAt(0).toUpperCase() + smartList.slice(1);
+      smartList === 'today' ? 'Today' :
+        smartList === 'important' ? 'Important' :
+          smartList === 'week' ? 'This Week' :
+            smartList.charAt(0).toUpperCase() + smartList.slice(1);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#18181c' : '#f3f4f6' }]}>
@@ -448,8 +465,8 @@ export default function TodoScreen({ smartList = 'all' }: { smartList?: string }
             alignItems: 'center',
           }]}
           onPress={() => {
-          setShowTaskForm(true);
-        }}
+            setShowTaskForm(true);
+          }}
           activeOpacity={0.8}
         >
           <FontAwesome5 name="plus" size={22} color={isDark ? '#111' : '#fff'} />
@@ -543,7 +560,7 @@ export default function TodoScreen({ smartList = 'all' }: { smartList?: string }
           </View>
         </View>
       )}
-      
+
       <CalendarPopover
         visible={calendarVisible}
         onClose={() => setCalendarVisible(false)}
@@ -621,14 +638,14 @@ const styles = StyleSheet.create({
   checkCircle: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: '#3b82f6', justifyContent: 'center', alignItems: 'center', marginRight: 14 },
   checkCircleCompleted: { backgroundColor: '#3b82f6' },
   checkMark: { color: '#fff', fontWeight: 'bold' },
-  taskText: { 
-    flex: 1, 
+  taskText: {
+    flex: 1,
     fontSize: 17,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro' : undefined,
     marginTop: 4, // Lower the text a bit
   },
-  taskTextCompleted: { 
-    textDecorationLine: 'line-through', 
+  taskTextCompleted: {
+    textDecorationLine: 'line-through',
     color: '#aaa',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro' : undefined,
   },
@@ -636,32 +653,32 @@ const styles = StyleSheet.create({
   deleteBtnText: { fontSize: 20, color: '#ff453a' },
   editBtn: { marginLeft: 8, padding: 4 },
   editBtnText: { fontSize: 16, color: '#3b82f6' },
-  priorityBadge: { 
-    borderRadius: 12, 
-    paddingHorizontal: 8, 
-    paddingVertical: 2, 
-    marginLeft: 8, 
-    alignSelf: 'center' 
+  priorityBadge: {
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginLeft: 8,
+    alignSelf: 'center'
   },
-  priorityBadgeText: { 
-    fontSize: 13, 
+  priorityBadgeText: {
+    fontSize: 13,
     fontWeight: '500',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro' : undefined,
   },
-  dueDateText: { 
-    fontSize: 13, 
-    color: '#64748b', 
-    marginLeft: 8, 
+  dueDateText: {
+    fontSize: 13,
+    color: '#64748b',
+    marginLeft: 8,
     alignSelf: 'center',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro' : undefined,
   },
-  moreOptionsBtn: { 
-    marginLeft: 8, 
+  moreOptionsBtn: {
+    marginLeft: 8,
     padding: 8,
     borderRadius: 4,
   },
-  moreOptionsText: { 
-    fontSize: 18, 
+  moreOptionsText: {
+    fontSize: 18,
     color: '#3b82f6',
     fontWeight: 'bold',
   },
@@ -698,8 +715,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
-  menuIcon: { 
-    marginRight: 8 
+  menuIcon: {
+    marginRight: 8
   },
   deleteButton: {
     justifyContent: 'center',

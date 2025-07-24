@@ -12,7 +12,6 @@ import {
   Alert,
   SafeAreaView,
   Animated,
-  KeyboardAvoidingView,
   Keyboard,
   Easing,
   findNodeHandle,
@@ -69,10 +68,22 @@ const APPLE_COLORS = {
 };
 
 const PRIORITY_COLORS = {
-  None: { bg: "#f2f2f7", color: "#8e8e93", border: "#e5e5ea" },
-  Low: { bg: "#e9f8ef", color: "#34c759", border: "#b7f5d8" },
-  Medium: { bg: "#fff6e5", color: "#ff9500", border: "#ffe5b2" },
-  High: { bg: "#ffe5e7", color: "#ff3b30", border: "#ffd1d4" },
+  None: {
+    light: { bg: "#f2f2f7", color: "#8e8e93", border: "#e5e5ea" },
+    dark: { bg: "#23232b", color: "#8e8e93", border: "#353542" }
+  },
+  Low: {
+    light: { bg: "#e9f8ef", color: "#34c759", border: "#b7f5d8" },
+    dark: { bg: "#19392b", color: "#30d158", border: "#295c44" }
+  },
+  Medium: {
+    light: { bg: "#fff6e5", color: "#ff9500", border: "#ffe5b2" },
+    dark: { bg: "#3a2a13", color: "#ff9f0a", border: "#5c4420" }
+  },
+  High: {
+    light: { bg: "#ffe5e7", color: "#ff3b30", border: "#ffd1d4" },
+    dark: { bg: "#3a191b", color: "#ff453a", border: "#5c292c" }
+  }
 };
 
 const DUE_DATE_OPTIONS = [
@@ -134,7 +145,7 @@ const Pill = React.forwardRef<any, any>((props, ref) => {
     >
       <View style={styles.pillLeft}>
         <Ionicons name={icon as any} size={20} color={iconColor ?? (isDark ? "#8e8e93" : "#6b7280")} />
-        <Text style={[styles.pillTitle, { color: isDark ? "#ffffff" : "#000000" }]}> 
+        <Text style={[styles.pillTitle, { color: isDark ? "#ffffff" : "#000000" }]}>
           {title}
         </Text>
       </View>
@@ -206,7 +217,7 @@ const Dropdown = ({
               width: dropdownWidth,
             });
           },
-          () => {}
+          () => { }
         );
       }, 10); // Small delay to ensure layout is complete
     }
@@ -312,7 +323,7 @@ const Dropdown = ({
                     width: 28,
                     height: 28,
                     borderRadius: 14,
-                    backgroundColor: PRIORITY_COLORS[option.key as keyof typeof PRIORITY_COLORS].bg,
+                    backgroundColor: PRIORITY_COLORS[option.key as keyof typeof PRIORITY_COLORS][isDark ? "dark" : "light"].bg,
                     justifyContent: 'center',
                     alignItems: 'center',
                     marginRight: 16,
@@ -321,7 +332,7 @@ const Dropdown = ({
                   <Ionicons
                     name={option.icon as any}
                     size={18}
-                    color={PRIORITY_COLORS[option.key as keyof typeof PRIORITY_COLORS].color}
+                    color={PRIORITY_COLORS[option.key as keyof typeof PRIORITY_COLORS][isDark ? "dark" : "light"].color}
                   />
                 </View>
               ) : (isDueDateDropdown || isRemindersDropdown) ? null : (
@@ -444,22 +455,22 @@ const SEGMENT_SUBTASKS: Record<string, string[]> = {
 
 // Segment to icon and color mapping
 const SEGMENT_ICONS: Record<string, { icon: string; color: string }> = {
-  house:    { icon: 'home-outline', color: '#5AC8FA' },      // systemTeal/Blue
-  work:     { icon: 'briefcase-outline', color: '#007AFF' }, // systemBlue
+  house: { icon: 'home-outline', color: '#5AC8FA' },      // systemTeal/Blue
+  work: { icon: 'briefcase-outline', color: '#007AFF' }, // systemBlue
   personal: { icon: 'person-outline', color: '#AF52DE' },    // systemPurple
-  health:   { icon: 'medkit-outline', color: '#34C759' },    // systemGreen
-  finance:  { icon: 'card-outline', color: '#FFD60A' },      // systemYellow
+  health: { icon: 'medkit-outline', color: '#34C759' },    // systemGreen
+  finance: { icon: 'card-outline', color: '#FFD60A' },      // systemYellow
   shopping: { icon: 'cart-outline', color: '#FF9500' },      // systemOrange
-  travel:   { icon: 'airplane-outline', color: '#FF375F' },  // systemPink/Red
-  study:    { icon: 'book-outline', color: '#5856D6' },      // systemIndigo
-  social:   { icon: 'people-outline', color: '#30D158' },    // systemMint/Green
-  fitness:  { icon: 'barbell-outline', color: '#FF2D55' },   // systemPink
-  pets:     { icon: 'paw-outline', color: '#FF9F0A' },       // systemOrange
-  errands:  { icon: 'walk-outline', color: '#A2845E' },      // soft brown
-  tech:     { icon: 'hardware-chip-outline', color: '#64D2FF' }, // light blue
-  garden:   { icon: 'leaf-outline', color: '#32D74B' },      // systemGreen
-  car:      { icon: 'car-outline', color: '#FF453A' },       // systemRed
-  kids:     { icon: 'happy-outline', color: '#FFD60A' },     // systemYellow
+  travel: { icon: 'airplane-outline', color: '#FF375F' },  // systemPink/Red
+  study: { icon: 'book-outline', color: '#5856D6' },      // systemIndigo
+  social: { icon: 'people-outline', color: '#30D158' },    // systemMint/Green
+  fitness: { icon: 'barbell-outline', color: '#FF2D55' },   // systemPink
+  pets: { icon: 'paw-outline', color: '#FF9F0A' },       // systemOrange
+  errands: { icon: 'walk-outline', color: '#A2845E' },      // soft brown
+  tech: { icon: 'hardware-chip-outline', color: '#64D2FF' }, // light blue
+  garden: { icon: 'leaf-outline', color: '#32D74B' },      // systemGreen
+  car: { icon: 'car-outline', color: '#FF453A' },       // systemRed
+  kids: { icon: 'happy-outline', color: '#FFD60A' },     // systemYellow
 };
 
 // 1. Robust explicit subtask extraction
@@ -617,7 +628,7 @@ function detectPriorityAndDueDate(text: string): { priority: TaskData["priority"
   let priority: TaskData["priority"] = "None";
   let dueDate: string | null = null;
 
-  if (lowerText.includes('urgent') || lowerText.includes('asap') || lowerText.includes('critical') || lowerText.includes('emergency') || lowerText.includes('immediately')) {
+  if (lowerText.includes('urgent') || lowerText.includes('asap') || lowerText.includes('critical') || lowerText.includes('emergency') || lowerText.includes('immediately') || lowerText.includes('as soon as possible')) {
     priority = "High";
   } else if (lowerText.includes('important') || lowerText.includes('priority') || lowerText.includes('soon') || lowerText.includes('quickly')) {
     priority = "Medium";
@@ -677,42 +688,9 @@ export default function TaskModal({
   const colors = APPLE_COLORS[theme];
   const isDark = theme === "dark";
 
-  // Remove keyboard state since we're using KeyboardAvoidingView
-
-  // Safe rendering function for children
-  const renderChildrenSafely = () => {
-    try {
-      if (children === undefined || children === null) {
-        return null;
-      }
-      if (typeof children === "string" || typeof children === "number") {
-        const safeText = String(children);
-        return <Text style={{ color: colors.label }}>{safeText}</Text>;
-      }
-      if (React.isValidElement(children)) {
-        return children;
-      }
-      if (Array.isArray(children)) {
-        return children.map((child, index) => {
-          if (typeof child === "string" || typeof child === "number") {
-            const safeText = String(child);
-            return (
-              <Text key={index} style={{ color: colors.label }}>
-                {safeText}
-              </Text>
-            );
-          }
-          return React.isValidElement(child)
-            ? React.cloneElement(child, { key: index })
-            : null;
-        });
-      }
-      return null;
-    } catch (error) {
-      console.warn("[TaskModal] Error in renderChildrenSafely:", error);
-      return null;
-    }
-  };
+  // Create animated value for keyboard height
+  const keyboardHeight = useRef(new Animated.Value(0)).current;
+  const contentOpacity = useRef(new Animated.Value(1)).current;
 
   // Form state
   const [taskText, setTaskText] = useState(editingTask?.text || "");
@@ -739,6 +717,9 @@ export default function TaskModal({
   const modalOpacity = useRef(new Animated.Value(0)).current;
   const modalScale = useRef(new Animated.Value(0.95)).current;
   const modalTranslateY = useRef(new Animated.Value(20)).current;
+  
+  // Submit button animation
+  const checkmarkOpacity = useRef(new Animated.Value(0)).current;
 
   // Refs
   const taskInputRef = useRef<TextInput>(null);
@@ -746,26 +727,52 @@ export default function TaskModal({
   const priorityDropdownRef = useRef<any>(null);
   const dueDateDropdownRef = useRef<any>(null);
   const reminderDropdownRef = useRef<any>(null);
-  // In TaskModal, add a ref to the modal content area
   const modalContentRef = useRef<any>(null);
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // Keyboard handling for automatic scrolling only
+  // Keyboard animation setup
   useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', (event) => {
-      // Keyboard is shown, we'll handle scrolling in onFocus
-    });
-
-    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
-      // Optional: scroll back to top when keyboard hides
-      if (scrollViewRef.current) {
-        scrollViewRef.current.scrollTo({ y: 0, animated: true });
+    const keyboardWillShow = Keyboard.addListener(
+      'keyboardWillShow', 
+      (e) => {
+        Animated.parallel([
+          Animated.timing(keyboardHeight, {
+            toValue: e.endCoordinates.height,
+            duration: 300,
+            easing: Easing.out(Easing.ease),
+            useNativeDriver: false,
+          }),
+          Animated.timing(contentOpacity, {
+            toValue: 0.98,
+            duration: 300,
+            useNativeDriver: true,
+          })
+        ]).start();
       }
-    });
+    );
+
+    const keyboardWillHide = Keyboard.addListener(
+      'keyboardWillHide', 
+      () => {
+        Animated.parallel([
+          Animated.timing(keyboardHeight, {
+            toValue: 0,
+            duration: 400,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: false,
+          }),
+          Animated.timing(contentOpacity, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+          })
+        ]).start();
+      }
+    );
 
     return () => {
-      keyboardDidShowListener?.remove();
-      keyboardDidHideListener?.remove();
+      keyboardWillShow.remove();
+      keyboardWillHide.remove();
     };
   }, []);
 
@@ -835,6 +842,7 @@ export default function TaskModal({
 
   const handleDueDateSelect = (option: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Keyboard.dismiss();
 
     if (option === "custom") {
       setShowDatePicker(true);
@@ -872,11 +880,13 @@ export default function TaskModal({
 
   const handlePrioritySelect = (selectedPriority: TaskData["priority"]) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Keyboard.dismiss();
     setPriority(selectedPriority);
   };
 
   const handleReminderSelect = (selectedReminder: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Keyboard.dismiss();
     setReminder(selectedReminder);
   };
 
@@ -905,12 +915,12 @@ export default function TaskModal({
 
   const handleSmartSuggestion = (suggestion: SmartSuggestion) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    
+
     // Only handle subtask suggestions now
     if (!subtasks.some(s => normalize(s) === normalize(suggestion.value))) {
       setSubtasks([...subtasks, suggestion.value]);
     }
-    
+
     // Remove the applied suggestion from the list
     setSmartSuggestions(prev => prev.filter(s => s !== suggestion));
     // Re-focus the task input to keep the keyboard open
@@ -960,64 +970,100 @@ export default function TaskModal({
     ],
   };
 
-  // Remove height animation to avoid native driver conflicts
-  // We'll use KeyboardAvoidingView instead
+  // Add Fade-in animation for the submit button while typing
+  useEffect(() => {
+    Animated.timing(checkmarkOpacity, {
+      toValue: notes.trim().length > 0 ? 1 : 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+  }, [notes]);
+
+  // Safe rendering function for children
+  const renderChildrenSafely = () => {
+    try {
+      if (children === undefined || children === null) {
+        return null;
+      }
+      if (typeof children === "string" || typeof children === "number") {
+        const safeText = String(children);
+        return <Text style={{ color: colors.label }}>{safeText}</Text>;
+      }
+      if (React.isValidElement(children)) {
+        return children;
+      }
+      if (Array.isArray(children)) {
+        return children.map((child, index) => {
+          if (typeof child === "string" || typeof child === "number") {
+            const safeText = String(child);
+            return (
+              <Text key={index} style={{ color: colors.label }}>
+                {safeText}
+              </Text>
+            );
+          }
+          return React.isValidElement(child)
+            ? React.cloneElement(child, { key: index })
+            : null;
+        });
+      }
+      return null;
+    } catch (error) {
+      console.warn("[TaskModal] Error in renderChildrenSafely:", error);
+      return null;
+    }
+  };
 
   return (
     <Modal
       visible={visible}
       transparent
-      animationType="slide"
+      animationType="fade"
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <KeyboardAvoidingView
-        style={styles.overlay}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={0}
-      >
+      <Animated.View style={[styles.overlay, { paddingBottom: keyboardHeight }]}>
         <Animated.View style={[styles.bottomSheet, animatedStyle]}>
-            <SafeAreaView style={[styles.headerSafeArea, { backgroundColor: isDark ? "#1c1c1e" : "#ffffff" }]}> 
-              <View style={styles.header}>
-                <TouchableOpacity
-                  style={[styles.closeButton, { backgroundColor: isDark ? "#2c2c2e" : "#f2f2f7" }]}
-                  onPress={onClose}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          <SafeAreaView style={[styles.headerSafeArea, { backgroundColor: isDark ? "#1c1c1e" : "#ffffff" }]}>
+            <View style={styles.header}>
+              <TouchableOpacity
+                style={[styles.closeButton, { backgroundColor: isDark ? "#2c2c2e" : "#f2f2f7" }]}
+                onPress={onClose}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="close" size={24} color={isDark ? "#ffffff" : "#000000"} />
+              </TouchableOpacity>
+              <Text style={[styles.headerTitle, { color: isDark ? "#ffffff" : "#000000" }]}>
+                {editingTask ? "Edit Task" : "New"}
+              </Text>
+              <TouchableOpacity
+                style={styles.checkmarkButton}
+                onPress={handleSave}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="checkmark" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
+          <Animated.View style={[styles.contentArea, { flex: 1, backgroundColor: isDark ? "#1c1c1e" : "#ffffff", opacity: contentOpacity }]}>
+            <View ref={modalContentRef} style={{ flex: 1 }}>
+              {children !== undefined && children !== null ? (
+                <View style={styles.childrenContainer}>
+                  {renderChildrenSafely()}
+                </View>
+              ) : (
+                <ScrollView
+                  ref={scrollViewRef}
+                  style={[styles.scrollContent, { flex: 1 }]}
+                  contentContainerStyle={{ ...styles.scrollContentContainer, flexGrow: 1 }}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
                 >
-                  <Ionicons name="close" size={24} color={isDark ? "#ffffff" : "#000000"} />
-                </TouchableOpacity>
-                <Text style={[styles.headerTitle, { color: isDark ? "#ffffff" : "#000000" }]}> 
-                  {editingTask ? "Edit Task" : "New"}
-                </Text>
-                <TouchableOpacity
-                  style={styles.checkmarkButton}
-                  onPress={handleSave}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <Ionicons name="checkmark" size={24} color="#fff" />
-                </TouchableOpacity>
-              </View>
-            </SafeAreaView>
-            <View style={[styles.contentArea, { flex: 1, backgroundColor: isDark ? "#1c1c1e" : "#ffffff" }]}> 
-              <View ref={modalContentRef} style={{ flex: 1 }}>
-                {children !== undefined && children !== null ? (
-                  <View style={styles.childrenContainer}>
-                    {renderChildrenSafely()}
-                  </View>
-                ) : (
-                  <ScrollView
-                    ref={scrollViewRef}
-                    style={[styles.scrollContent, { flex: 1 }]}
-                    contentContainerStyle={{ ...styles.scrollContentContainer, flexGrow: 1 }}
-                    keyboardShouldPersistTaps="handled"
-                    showsVerticalScrollIndicator={false}
-                  >
                   {/* Task Input (keep as pill) */}
                   <View style={[
                     styles.inputContainer,
                     {
                       backgroundColor: isDark ? "#1c1c1e" : "#ffffff",
-                      marginBottom: 20,
                       height: 48,
                       borderRadius: 24,
                       borderWidth: 2,
@@ -1055,18 +1101,18 @@ export default function TaskModal({
                           clean = clean.charAt(0).toUpperCase() + clean.slice(1).toLowerCase();
                         }
                         setTaskText(clean);
-                        
+
                         // Automatically detect priority and due date
                         const { priority: detectedPriority, dueDate: detectedDueDate } = detectPriorityAndDueDate(clean);
                         setPriority(detectedPriority);
                         if (detectedDueDate) {
                           setDueDate(detectedDueDate);
                         }
-                        
+
                         // Parse subtask patterns from text
                         const patternSubtasks = parseSmartSuggestions(clean);
                         setSmartSuggestions(patternSubtasks);
-                        
+
                         // Generate smart subtask suggestions based on context
                         const contextSubtasks = generateSmartSubtasks(clean);
                         setSmartSubtaskSuggestions(contextSubtasks);
@@ -1092,17 +1138,20 @@ export default function TaskModal({
                       ]}>
                         Detected Subtasks
                       </Text>
-                      <ScrollView 
-                        horizontal 
+                      <ScrollView
+                        horizontal
                         showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={styles.suggestionsScroll}
+                        contentContainerStyle={[
+                          styles.suggestionsScroll,
+                          { paddingLeft: 0, paddingRight: 0, marginLeft: 0, marginRight: 0 }
+                        ]}
                         keyboardShouldPersistTaps="always"
                       >
                         {smartSuggestions
                           .filter(suggestion => {
                             const val = normalize(suggestion.value);
                             return !subtasks.some(s => normalize(s) === val) &&
-                                   !smartSubtaskSuggestions.some(s => normalize(s.value) === val);
+                              !smartSubtaskSuggestions.some(s => normalize(s.value) === val);
                           })
                           .map((suggestion, index) => (
                             <SmartSuggestionItem
@@ -1121,8 +1170,8 @@ export default function TaskModal({
                       <Text style={styles.suggestionsTitleApple}>
                         Suggested Subtasks
                       </Text>
-                      <ScrollView 
-                        horizontal 
+                      <ScrollView
+                        horizontal
                         showsHorizontalScrollIndicator={false}
                         contentContainerStyle={[styles.suggestionsScrollApple, { paddingLeft: 18, paddingRight: 18 }]}
                         style={{ width: '100%' }}
@@ -1132,7 +1181,7 @@ export default function TaskModal({
                           .filter(subtask => {
                             const val = normalize(subtask.value);
                             return !subtasks.some(s => normalize(s) === val) &&
-                                   !smartSuggestions.some(s => normalize(s.value) === val);
+                              !smartSuggestions.some(s => normalize(s.value) === val);
                           })
                           .map((subtask, index) => (
                             <TouchableOpacity
@@ -1153,7 +1202,7 @@ export default function TaskModal({
                               ]}>
                                 {subtask.value}
                               </Text>
-                              <Ionicons name="add" size={20} color={subtask.color} />
+                              <Ionicons name="add" size={20} color={subtask.color} style={{ marginLeft: 5 }} />
                             </TouchableOpacity>
                           ))}
                       </ScrollView>
@@ -1203,25 +1252,55 @@ export default function TaskModal({
                     ref={priorityDropdownRef}
                     title="Priority"
                     value={priority}
-                    onPress={() => setShowPriorityDropdown(true)}
+                    onPress={() => {
+                      Keyboard.dismiss();
+                      setShowPriorityDropdown(true);
+                    }}
                     icon="flag-outline"
                     isDark={isDark}
                     showDot={true}
-                    dotColor={PRIORITY_COLORS[priority].color}
-                    pillStyle={{
-                      backgroundColor: PRIORITY_COLORS[priority].bg,
-                      borderColor: PRIORITY_COLORS[priority].border,
-                      borderWidth: 1,
-                    }}
-                    valueStyle={{ color: PRIORITY_COLORS[priority].color }}
-                    iconColor={PRIORITY_COLORS[priority].color}
+                    dotColor={PRIORITY_COLORS[priority][isDark ? "dark" : "light"].color}
+                    pillStyle={
+                      isDark && priority === "None"
+                        ? {
+
+                        }
+                        : !isDark && priority !== "None"
+                          ? {
+                            shadowColor: PRIORITY_COLORS[priority].light.color,
+                            shadowOffset: { width: 0, height: 2 },
+                            shadowOpacity: 0.1,
+                            shadowRadius: 8,
+                            elevation: 4,
+                            backgroundColor: PRIORITY_COLORS[priority].light.bg,
+                            borderColor: PRIORITY_COLORS[priority].light.border,
+                            borderWidth: 1,
+                          }
+                          : isDark && priority !== "None"
+                            ? {
+                              backgroundColor: PRIORITY_COLORS[priority].dark.bg,
+                              borderColor: PRIORITY_COLORS[priority].dark.border,
+                              borderWidth: 1,
+                              shadowColor: PRIORITY_COLORS[priority].dark.color,
+                              shadowOffset: { width: 0, height: 2 },
+                              shadowOpacity: 0.1,
+                              shadowRadius: 8,
+                              elevation: 4,
+                            }
+                            : {}
+                    }
+                    valueStyle={{ color: PRIORITY_COLORS[priority][isDark ? "dark" : "light"].color }}
+                    iconColor={PRIORITY_COLORS[priority][isDark ? "dark" : "light"].color}
                   />
                   {/* Due Date Pill */}
                   <Pill
                     ref={dueDateDropdownRef}
                     title="Due Date"
                     value={getSelectedDueDateLabel()}
-                    onPress={() => setShowDueDateDropdown(true)}
+                    onPress={() => {
+                      Keyboard.dismiss();
+                      setShowDueDateDropdown(true);
+                    }}
                     icon="calendar-outline"
                     isDark={isDark}
                   />
@@ -1230,12 +1309,21 @@ export default function TaskModal({
                     ref={reminderDropdownRef}
                     title="Reminder"
                     value={getSelectedReminderLabel()}
-                    onPress={() => setShowReminderDropdown(true)}
+                    onPress={() => {
+                      Keyboard.dismiss();
+                      setShowReminderDropdown(true);
+                    }}
                     icon="notifications-outline"
                     isDark={isDark}
                   />
                   {/* Notes Input (move to bottom, not pill) */}
-                  <View style={[styles.notesContainer, { backgroundColor: isDark ? "#1c1c1e" : "#ffffff" }]}>
+                  <View style={[styles.notesContainer, { backgroundColor: isDark ? "#1c1c1e" : "#ffffff", borderColor: "#535353ff", borderWidth: 0.5 }]}>
+                    <Ionicons
+                      name="document-text-outline"
+                      size={20}
+                      color={isDark ? "#8e8e93" : "#6b7280"}
+                      style={{ marginRight: 10 }}
+                    />
                     <TextInput
                       ref={notesInputRef}
                       style={[styles.notesInput, { color: isDark ? "#ffffff" : "#000000" }]}
@@ -1254,53 +1342,70 @@ export default function TaskModal({
                         }
                       }}
                     />
+                    <Animated.View style={{ opacity: checkmarkOpacity }}>
+                      <TouchableOpacity
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                          Keyboard.dismiss();
+                          // Optional: save notes or clear input
+                        }}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        style={{
+                          marginLeft: 10,
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <Ionicons name="checkmark-circle" size={22} color="#34c759" />
+                      </TouchableOpacity>
+                    </Animated.View>
                   </View>
-                    </ScrollView>
-                  )}
-              </View>
+                </ScrollView>
+              )}
             </View>
-            {/* Dropdowns */}
-            <Dropdown
-              visible={showPriorityDropdown}
-              options={PRIORITY_OPTIONS}
-              onSelect={(key) => handlePrioritySelect(key as TaskData["priority"])}
-              onClose={() => setShowPriorityDropdown(false)}
-              isDark={isDark}
-              dropdownAnchorRef={priorityDropdownRef}
-              parentRef={modalContentRef}
-            />
-
-            <Dropdown
-              visible={showDueDateDropdown}
-              options={DUE_DATE_OPTIONS}
-              onSelect={handleDueDateSelect}
-              onClose={() => setShowDueDateDropdown(false)}
-              isDark={isDark}
-              dropdownAnchorRef={dueDateDropdownRef}
-              parentRef={modalContentRef}
-            />
-
-            <Dropdown
-              visible={showReminderDropdown}
-              options={REMINDER_OPTIONS}
-              onSelect={handleReminderSelect}
-              onClose={() => setShowReminderDropdown(false)}
-              isDark={isDark}
-              dropdownAnchorRef={reminderDropdownRef}
-              parentRef={modalContentRef}
-            />
-
-            {/* Date Picker */}
-            {showDatePicker ? (
-              <DateTimePicker
-                value={customDate}
-                mode="date"
-                display="default"
-                onChange={handleCustomDateChange}
-              />
-            ) : null}
           </Animated.View>
-        </KeyboardAvoidingView>
+          {/* Dropdowns */}
+          <Dropdown
+            visible={showPriorityDropdown}
+            options={PRIORITY_OPTIONS}
+            onSelect={(key) => handlePrioritySelect(key as TaskData["priority"])}
+            onClose={() => setShowPriorityDropdown(false)}
+            isDark={isDark}
+            dropdownAnchorRef={priorityDropdownRef}
+            parentRef={modalContentRef}
+          />
+
+          <Dropdown
+            visible={showDueDateDropdown}
+            options={DUE_DATE_OPTIONS}
+            onSelect={handleDueDateSelect}
+            onClose={() => setShowDueDateDropdown(false)}
+            isDark={isDark}
+            dropdownAnchorRef={dueDateDropdownRef}
+            parentRef={modalContentRef}
+          />
+
+          <Dropdown
+            visible={showReminderDropdown}
+            options={REMINDER_OPTIONS}
+            onSelect={handleReminderSelect}
+            onClose={() => setShowReminderDropdown(false)}
+            isDark={isDark}
+            dropdownAnchorRef={reminderDropdownRef}
+            parentRef={modalContentRef}
+          />
+
+          {/* Date Picker */}
+          {showDatePicker ? (
+            <DateTimePicker
+              value={customDate}
+              mode="date"
+              display="default"
+              onChange={handleCustomDateChange}
+            />
+          ) : null}
+        </Animated.View>
+      </Animated.View>
     </Modal>
   );
 }
@@ -1333,7 +1438,7 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
   },
   modalContent: {
-    maxHeight: "80%",
+    maxHeight: "100%",
     borderRadius: 24,
     backgroundColor: "transparent",
     padding: 0,
@@ -1400,7 +1505,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     height: 40,
     borderRadius: 20,
-    marginBottom: 24,
+    marginBottom: 40,
     paddingHorizontal: 20,
     paddingVertical: 0,
     borderWidth: 1,
@@ -1421,7 +1526,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     borderWidth: 0,
     padding: 0,
-    ...(Platform.OS === 'android' ? { textAlignVertical: 'center' } : {}),
   },
   pill: {
     flexDirection: "row",
@@ -1534,7 +1638,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginTop: 8,
     paddingHorizontal: 20,
-    paddingVertical: 0,
     borderWidth: 1,
     borderColor: '#e5e5ea',
     backgroundColor: '#fff',
@@ -1585,6 +1688,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 14, // more space between icon and text
+    backgroundColor: "#434343",
   },
   suggestionText: {
     flex: 1,
@@ -1593,9 +1697,8 @@ const styles = StyleSheet.create({
     marginRight: 14, // more space between text and add button
   },
   subtasksContainer: {
-    marginTop: 12,
+    marginTop: 16,
     paddingHorizontal: 20,
-    paddingBottom: 8,
   },
   subtasksTitle: {
     fontSize: 12,
@@ -1605,24 +1708,21 @@ const styles = StyleSheet.create({
   subtaskItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 12,
+    borderRadius: 10,
     paddingVertical: 8,
     paddingHorizontal: 12,
-    marginBottom: 4,
-    borderWidth: 1,
-    borderColor: '#e5e5ea',
+    marginBottom: 30,
+    minHeight: 44,
   },
   subtaskText: {
     flex: 1,
-    fontSize: 14,
-    fontWeight: '400',
+    fontSize: 15,
+    fontWeight: '500',
     marginLeft: 8,
   },
   // Add new Apple-style styles
   suggestionsContainerApple: {
-    marginTop: 16,
-    marginBottom: 28,
-    // paddingHorizontal: 18, // Removed horizontal padding
+    marginBottom: 15,
     paddingVertical: 0,
     backgroundColor: 'transparent',
     width: '100%',
@@ -1665,7 +1765,7 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 11,
   },
   suggestionTextApple: {
     fontSize: 15,
