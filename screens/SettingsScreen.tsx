@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Switch, Platform, TextInput, TouchableOpacity, Modal, SafeAreaView, Appearance } from 'react-native';
+import { Svg, Circle } from 'react-native-svg';
+import { Animated, Easing } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../ThemeContext';
@@ -302,48 +304,118 @@ export default function SettingsScreen() {
 
       {/* Pomodoro Timer Modal */}
       <Modal visible={pomodoroVisible} animationType="slide" transparent onRequestClose={() => setPomodoroVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContainer, { backgroundColor: isDark ? '#1c1c1e' : '#ffffff' }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: isDark ? '#ffffff' : '#000000' }]}>Pomodoro Timer</Text>
-              <TouchableOpacity onPress={() => setPomodoroVisible(false)} style={styles.closeButton}>
-                <Ionicons name="close" size={24} color={isDark ? '#ffffff' : '#000000'} />
+        <TouchableOpacity
+          activeOpacity={1}
+          style={styles.modalOverlay}
+          onPressOut={() => setPomodoroVisible(false)}
+        >
+          {BlurView ? (
+            <BlurView intensity={60} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+          ) : (
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(28,28,30,0.7)' : 'rgba(255,255,255,0.7)' }]} />
+          )}
+          <View style={[styles.pomoModalContainer, { backgroundColor: isDark ? 'rgba(28,28,30,0.85)' : 'rgba(255,255,255,0.85)' }]}> 
+            <View style={styles.pomoModalHeader}>
+              <View style={styles.pomoModalHandle} />
+              <Text style={[styles.pomoModalTitle, { color: isDark ? '#fff' : '#000' }]}>Pomodoro</Text>
+              <TouchableOpacity onPress={() => setPomodoroVisible(false)} style={styles.pomoCloseButton} hitSlop={{top:10,bottom:10,left:10,right:10}}>
+                <Ionicons name="close" size={24} color={isDark ? '#fff' : '#000'} />
               </TouchableOpacity>
             </View>
-            
-            <View style={styles.timerContainer}>
-              <Text style={[styles.timerLabel, { color: isDark ? '#8e8e93' : '#6b7280' }]}>
-                Stay focused for 25 minutes
-              </Text>
-              <Text style={[styles.timerDisplay, { color: isDark ? '#ffffff' : '#000000' }]}>
-                {formatTime(pomodoroTime)}
-              </Text>
+            <View style={styles.pomoTimerSection}>
+              <PomodoroProgressCircle
+                progress={pomodoroTime / (25 * 60)}
+                isDark={isDark}
+                time={formatTime(pomodoroTime)}
+              />
+              <Text style={[styles.pomoTimerLabel, { color: isDark ? '#8e8e93' : '#6b7280' }]}>Stay focused for 25 minutes</Text>
             </View>
-
-            <View style={styles.timerControls}>
+            <View style={styles.pomoTimerControls}>
               {!pomodoroRunning ? (
-                <TouchableOpacity onPress={startPomodoro} style={styles.startButton}>
-                  <Ionicons name="play" size={20} color="#ffffff" />
-                  <Text style={styles.startButtonText}>Start</Text>
+                <TouchableOpacity onPress={startPomodoro} style={styles.pomoStartButton}>
+                  <Ionicons name="play" size={20} color="#fff" />
+                  <Text style={styles.pomoStartButtonText}>Start</Text>
                 </TouchableOpacity>
               ) : (
-                <TouchableOpacity onPress={stopPomodoro} style={styles.pauseButton}>
-                  <Ionicons name="pause" size={20} color="#ffffff" />
-                  <Text style={styles.pauseButtonText}>Pause</Text>
+                <TouchableOpacity onPress={stopPomodoro} style={styles.pomoPauseButton}>
+                  <Ionicons name="pause" size={20} color="#fff" />
+                  <Text style={styles.pomoPauseButtonText}>Pause</Text>
                 </TouchableOpacity>
               )}
-              
-              <TouchableOpacity onPress={resetPomodoro} style={[styles.resetButton, { backgroundColor: isDark ? '#2c2c2e' : '#f2f2f7' }]}>
-                <Ionicons name="refresh" size={20} color={isDark ? '#ffffff' : '#000000'} />
-                <Text style={[styles.resetButtonText, { color: isDark ? '#ffffff' : '#000000' }]}>Reset</Text>
+              <TouchableOpacity onPress={resetPomodoro} style={[styles.pomoResetButton, { backgroundColor: isDark ? '#232325' : '#f2f2f7' }] }>
+                <Ionicons name="refresh" size={20} color={isDark ? '#fff' : '#000'} />
+                <Text style={[styles.pomoResetButtonText, { color: isDark ? '#fff' : '#000' }]}>Reset</Text>
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </TouchableOpacity>
       </Modal>
     </SafeAreaView>
   );
 }
+
+// Pomodoro Progress Circle Component
+
+const PomodoroProgressCircle = ({ progress, isDark, time }: { progress: number; isDark: boolean; time: string }) => {
+  const size = 180;
+  const strokeWidth = 8;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const animatedProgress = useRef(new Animated.Value(progress)).current;
+
+  useEffect(() => {
+    Animated.timing(animatedProgress, {
+      toValue: progress,
+      duration: 400,
+      easing: Easing.out(Easing.ease),
+      useNativeDriver: false,
+    }).start();
+  }, [progress]);
+
+  const animatedOffset = animatedProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [circumference, 0],
+  });
+
+  return (
+    <View style={{ alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+      <Svg width={size} height={size}>
+        <Circle
+          stroke={isDark ? '#232325' : '#e5e5ea'}
+          fill="none"
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          strokeWidth={strokeWidth}
+        />
+        <AnimatedCircle
+          stroke={isDark ? '#34c759' : '#34c759'}
+          fill="none"
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          strokeWidth={strokeWidth}
+          strokeDasharray={`${circumference},${circumference}`}
+          strokeDashoffset={animatedOffset}
+          strokeLinecap="round"
+        />
+      </Svg>
+      <Text style={{
+        position: 'absolute',
+        fontSize: 48,
+        fontWeight: '200',
+        color: isDark ? '#fff' : '#000',
+        fontVariant: ['tabular-nums'],
+        fontFamily: Platform.OS === 'ios' ? 'System' : undefined,
+        letterSpacing: -1,
+        width: size,
+        textAlign: 'center',
+      }}>{time}</Text>
+    </View>
+  );
+};
+
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 const styles = StyleSheet.create({
   container: {
@@ -437,105 +509,143 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginHorizontal: 8,
   },
+  // --- Pomodoro Modal Redesign ---
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
     alignItems: 'center',
   },
-  modalContainer: {
-    width: '85%',
-    maxWidth: 320,
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.25,
-    shadowRadius: 40,
-    elevation: 20,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  pomoModalContainer: {
     width: '100%',
-    marginBottom: 24,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 32,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    elevation: 12,
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
+  pomoModalHeader: {
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 12,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    position: 'relative',
   },
-  closeButton: {
+  pomoModalHandle: {
+    position: 'absolute',
+    top: -8,
+    left: '50%',
+    marginLeft: -18,
+    width: 36,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#d1d1d6',
+    opacity: 0.5,
+  },
+  pomoModalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+    flex: 1,
+    textAlign: 'center',
+    fontFamily: Platform.OS === 'ios' ? 'System' : undefined,
+  },
+  pomoCloseButton: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
     padding: 4,
   },
-  timerContainer: {
+  pomoTimerSection: {
     alignItems: 'center',
-    marginBottom: 32,
-  },
-  timerLabel: {
-    fontSize: 16,
-    fontWeight: '400',
-    opacity: 0.6,
     marginBottom: 16,
+    width: '100%',
+  },
+  pomoTimerLabel: {
+    fontSize: 15,
+    fontWeight: '400',
+    opacity: 0.7,
+    marginTop: 2,
     textAlign: 'center',
+    fontFamily: Platform.OS === 'ios' ? 'System' : undefined,
   },
-  timerDisplay: {
-    fontSize: 64,
-    fontWeight: '300',
-    letterSpacing: -1,
-  },
-  timerControls: {
+  pomoTimerControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     width: '100%',
-    gap: 12,
+    gap: 16,
+    marginTop: 8,
   },
-  startButton: {
+  pomoStartButton: {
     flex: 1,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 12,
+    paddingVertical: 14,
+    borderRadius: 16,
     backgroundColor: '#34c759',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 4,
+    shadowColor: '#34c759',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  startButtonText: {
+  pomoStartButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#ffffff',
+    color: '#fff',
     marginLeft: 8,
+    fontFamily: Platform.OS === 'ios' ? 'System' : undefined,
   },
-  pauseButton: {
+  pomoPauseButton: {
     flex: 1,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 12,
+    paddingVertical: 14,
+    borderRadius: 16,
     backgroundColor: '#ff453a',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 4,
+    shadowColor: '#ff453a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  pauseButtonText: {
+  pomoPauseButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#ffffff',
+    color: '#fff',
     marginLeft: 8,
+    fontFamily: Platform.OS === 'ios' ? 'System' : undefined,
   },
-  resetButton: {
+  pomoResetButton: {
     flex: 1,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 12,
+    paddingVertical: 14,
+    borderRadius: 16,
+    // backgroundColor set dynamically
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 1,
   },
-  resetButtonText: {
+  pomoResetButtonText: {
     fontSize: 16,
     fontWeight: '600',
     marginLeft: 8,
+    fontFamily: Platform.OS === 'ios' ? 'System' : undefined,
   },
 }); 
