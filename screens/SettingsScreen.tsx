@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Switch, Platform, TextInput, TouchableOpacity, Modal, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, Switch, Platform, TextInput, TouchableOpacity, Modal, SafeAreaView, Appearance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../ThemeContext';
@@ -216,7 +216,13 @@ export default function SettingsScreen() {
             icon="moon"
             title="Dark Mode"
             subtitle="Switch between light and dark themes"
-            rightElement={<AppleToggle value={isDark} onValueChange={(v) => setTheme(v ? 'dark' : 'light')} isDark={isDark} />}
+            rightElement={
+              <AppleToggle 
+                value={isDark} 
+                onValueChange={(v) => setTheme(v ? 'dark' : 'light')} 
+                isDark={isDark} 
+              />
+            }
             isDark={isDark}
           />
         </SettingsSection>
