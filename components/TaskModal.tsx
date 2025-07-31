@@ -4,6 +4,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   StyleSheet,
   Modal,
   Platform,
@@ -1022,8 +1023,10 @@ export default function TaskModal({
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <Animated.View style={[styles.overlay, { paddingBottom: keyboardHeight }]}>
-        <Animated.View style={[styles.bottomSheet, animatedStyle]}>
+      <TouchableWithoutFeedback onPress={onClose}>
+        <Animated.View style={[styles.overlay, { paddingBottom: keyboardHeight }]}>
+          <TouchableWithoutFeedback onPress={(e: any) => e.stopPropagation()}>
+            <Animated.View style={[styles.bottomSheet, animatedStyle, { backgroundColor: isDark ? "#1c1c1e" : "#ffffff" }]}>
           <SafeAreaView style={[styles.headerSafeArea, { backgroundColor: isDark ? "#1c1c1e" : "#ffffff" }]}>
             <View style={styles.header}>
               <TouchableOpacity
@@ -1404,8 +1407,10 @@ export default function TaskModal({
               onChange={handleCustomDateChange}
             />
           ) : null}
+            </Animated.View>
+          </TouchableWithoutFeedback>
         </Animated.View>
-      </Animated.View>
+      </TouchableWithoutFeedback>
     </Modal>
   );
 }
@@ -1422,7 +1427,6 @@ const styles = StyleSheet.create({
     height: MODAL_HEIGHT,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    backgroundColor: "#fff",
     overflow: "hidden",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -4 },

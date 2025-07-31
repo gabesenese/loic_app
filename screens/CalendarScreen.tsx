@@ -51,9 +51,9 @@ const APPLE_COLORS = {
 
 const PRIORITY_COLORS = {
   None: { bg: '#f2f2f7', color: '#8e8e93', border: '#e5e5ea' },
-  Low: { bg: '#e9f8ef', color: '#34c759', border: '#b7f5d8' },
-  Medium: { bg: '#fff6e5', color: '#ff9500', border: '#ffe5b2' },
-  High: { bg: '#ffe5e7', color: '#ff3b30', border: '#ffd1d4' },
+  Low: { bg: '#a8e6cf', color: '#34c759', border: '#b7f5d8' },
+  Medium: { bg: '#ffd6a5', color: '#ff9500', border: '#ffe5b2' },
+  High: { bg: '#ffb3ba', color: '#ff3b30', border: '#ffd1d4' },
 };
 
 // Memoized event list component
@@ -271,6 +271,10 @@ export default function CalendarScreen() {
   const [taskModalDate, setTaskModalDate] = useState<string | null>(null);
   const [taskModalEditingTask, setTaskModalEditingTask] = useState<any>(null);
   
+  // Separate state for adding new tasks
+  const [showAddTaskModal, setShowAddTaskModal] = useState(false);
+  const [addTaskModalDate, setAddTaskModalDate] = useState<string | null>(null);
+  
   // Declare pendingDate state at the top so it's available everywhere
   const [pendingDate, setPendingDate] = useState<string | null>(null);
   
@@ -294,7 +298,6 @@ export default function CalendarScreen() {
   const today = new Date();
   const [selectedDate, setSelectedDate] = useState(formatDate(today));
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [showAddTask, setShowAddTask] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const flatListRef = useRef<FlatList<any>>(null);
   const [showDayDetailModal, setShowDayDetailModal] = useState(false);
@@ -351,7 +354,6 @@ export default function CalendarScreen() {
     }
   });
 
-  const [addTaskDate, setAddTaskDate] = useState<string | null>(null);
   const [showAgenda, setShowAgenda] = useState(false);
 
   // Move agendaTasks useMemo to top level
@@ -394,16 +396,14 @@ export default function CalendarScreen() {
 
   // Animate in when modal is shown
   useEffect(() => {
-    if (showAddTask || editingTask) {
+    if (editingTask) {
       animateAddModalIn();
     }
-  }, [showAddTask, editingTask]);
+  }, [editingTask]);
 
   const handleAddModalClose = useCallback(() => {
     // Ensure all modals are closed
-    setShowAddTask(false);
     setEditingTask(null);
-    setAddTaskDate(null);
     setHighlightedDate(null);
     setShowDayDetailModal(false);
   }, []);
@@ -520,7 +520,26 @@ const animateModalOut = useCallback(() => {
 
   // Memoized event card renderer for better performance
   const renderEventCard = useCallback(({ item }: { item: Task }) => (
-    <View style={[styles.eventCard, { backgroundColor: colors.card, shadowColor: '#000' }]}> 
+    <TouchableOpacity
+      style={[styles.eventCard, { backgroundColor: colors.card, shadowColor: '#000' }]}
+      onLongPress={() => {
+        setTaskModalDate(item.dueDate?.slice(0, 10) || formatDate(today));
+        setTaskModalEditingTask({
+          id: item.id,
+          text: item.text,
+          notes: item.note || '',
+          priority: item.priority,
+          dueDate: item.dueDate || formatDate(today) + 'T00:00:00',
+          reminder: 'none',
+          completed: item.completed,
+          subtasks: item.subtasks || [],
+          archived: item.archived,
+          category: item.category,
+        });
+        setShowTaskModal(true);
+      }}
+      activeOpacity={0.7}
+    > 
       <View style={styles.eventCardLeft}>
         <View style={[styles.eventCardDot, { backgroundColor: PRIORITY_COLORS[item.priority as keyof typeof PRIORITY_COLORS].bg }]} />
       </View>
@@ -532,8 +551,8 @@ const animateModalOut = useCallback(() => {
           )}
         </View>
       </View>
-    </View>
-  ), [colors]);
+    </TouchableOpacity>
+  ), [colors, setTaskModalDate, setTaskModalEditingTask, setShowTaskModal, today]);
 
   // Memoized key extractor for better FlatList performance
   const keyExtractor = useCallback((item: Task) => item.id, []);
@@ -569,18 +588,10 @@ const animateModalOut = useCallback(() => {
         <TouchableOpacity
           style={headerActionPillStyle}
           onPress={() => {
-            // Open TaskModal for visible month and today's date (or first day of visible month)
+            // Open AddTaskModal for visible month and today's date (or first day of visible month)
             const date = formatDate(new Date(visibleMonth.year, visibleMonth.month, today.getDate()));
-            setTaskModalDate(date);
-            setTaskModalEditingTask({
-              text: '',
-              notes: '',
-              priority: 'None',
-              dueDate: date + 'T00:00:00',
-              reminder: 'none',
-              completed: false,
-            });
-            setShowTaskModal(true);
+            setAddTaskModalDate(date);
+            setShowAddTaskModal(true);
           }}
           accessibilityLabel="Add Task"
         >
@@ -631,36 +642,199 @@ const animateModalOut = useCallback(() => {
   }, [getTasksForDate, handleDayPress, highlightedDate, theme]);
 
   const renderBottomBar = useCallback(() => (
-    <View style={bottomBarWrapStyle}>
-      <TouchableOpacity style={bottomBarBtnStyle} onPress={() => {
-        setSelectedDate(formatDate(today));
-        const todayIndex = monthsOfYear.findIndex(
-          m => m.year === today.getFullYear() && m.month === today.getMonth()
-        );
-        if (todayIndex !== -1) {
-          flatListRef.current?.scrollToIndex({ index: todayIndex, animated: true });
-        }
-      }}>
-        <Text style={bottomBarBtnTextStyle}>Today</Text>
-      </TouchableOpacity>
-    </View>
-  ), [bottomBarWrapStyle, bottomBarBtnStyle, bottomBarBtnTextStyle, monthsOfYear, today]);
+    // Only show bottom bar when not in agenda/list mode
+    !showAgenda ? (
+      <View style={bottomBarWrapStyle}>
+        <TouchableOpacity style={bottomBarBtnStyle} onPress={() => {
+          setSelectedDate(formatDate(today));
+          const todayIndex = monthsOfYear.findIndex(
+            m => m.year === today.getFullYear() && m.month === today.getMonth()
+          );
+          if (todayIndex !== -1) {
+            flatListRef.current?.scrollToIndex({ index: todayIndex, animated: true });
+          }
+        }}>
+          <Text style={bottomBarBtnTextStyle}>Today</Text>
+        </TouchableOpacity>
+      </View>
+    ) : null
+  ), [bottomBarWrapStyle, bottomBarBtnStyle, bottomBarBtnTextStyle, monthsOfYear, today, showAgenda]);
 
-  const renderAgendaView = useCallback(() => (
-    <View style={[styles.container, { backgroundColor: theme === 'dark' ? '#000000' : colors.background }]}> 
-      <FlatList
-        data={agendaTasks}
-        keyExtractor={keyExtractor}
-        renderItem={renderEventCard}
-        ItemSeparatorComponent={ItemSeparator}
-        ListEmptyComponent={() => <Text style={eventListEmptyStyle}>No events</Text>}
-        contentContainerStyle={eventListWrapStyle}
-        initialNumToRender={5} // Optimization: minimal render
-        maxToRenderPerBatch={5}
-        windowSize={3}
-      />
-    </View>
-  ), [agendaTasks, keyExtractor, renderEventCard, ItemSeparator, eventListEmptyStyle, eventListWrapStyle, theme, colors]);
+  // Helper function to group tasks by date
+  const groupTasksByDate = useCallback((tasks: Task[]) => {
+    const grouped: { [date: string]: Task[] } = {};
+    tasks.forEach(task => {
+      if (task.dueDate) {
+        const dateStr = task.dueDate.slice(0, 10); // YYYY-MM-DD
+        if (!grouped[dateStr]) {
+          grouped[dateStr] = [];
+        }
+        grouped[dateStr].push(task);
+      }
+    });
+    return grouped;
+  }, []);
+
+  // Helper function to format date for display
+  const formatDateForDisplay = useCallback((dateStr: string) => {
+    const date = new Date(dateStr);
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    if (date.toDateString() === today.toDateString()) {
+      return 'Today';
+    } else if (date.toDateString() === tomorrow.toDateString()) {
+      return 'Tomorrow';
+    } else {
+      return date.toLocaleDateString(undefined, { 
+        weekday: 'long', 
+        month: 'short', 
+        day: 'numeric' 
+      });
+    }
+  }, []);
+
+  const renderAgendaView = useCallback(() => {
+    const groupedTasks = groupTasksByDate(agendaTasks);
+    const sortedDates = Object.keys(groupedTasks).sort();
+    
+    const renderDateHeader = (dateStr: string) => {
+      const tasks = groupedTasks[dateStr];
+      const isTodayDate = dateStr === formatDate(today);
+      
+      return (
+        <View key={`header-${dateStr}`} style={[
+          styles.agendaDateHeader,
+          { 
+            backgroundColor: theme === 'dark' ? '#000000' : colors.background,
+            borderBottomColor: theme === 'dark' ? '#333' : '#e5e7eb'
+          }
+        ]}>
+          <View style={styles.agendaDateHeaderContent}>
+            <Text style={[
+              styles.agendaDateText,
+              { 
+                color: isTodayDate ? '#ff3b30' : (theme === 'dark' ? '#fff' : '#111'),
+                fontWeight: isTodayDate ? '700' : '600'
+              }
+            ]}>
+              {formatDateForDisplay(dateStr)}
+            </Text>
+          </View>
+          <View style={styles.agendaTaskIndicator}>
+            <Text style={[
+              styles.agendaTaskCount,
+              { color: theme === 'dark' ? '#666' : '#999' }
+            ]}>
+              {tasks.length} {tasks.length === 1 ? 'event' : 'events'}
+            </Text>
+          </View>
+        </View>
+      );
+    };
+
+    const renderTaskItem = (task: Task) => (
+      <TouchableOpacity
+        key={task.id}
+        style={[
+          styles.agendaTaskItem,
+          { backgroundColor: theme === 'dark' ? '#1c1c1e' : '#fff', marginTop: 10, marginLeft: 0, width: '100%' }
+        ]}
+        onLongPress={() => {
+          setTaskModalDate(task.dueDate?.slice(0, 10) || formatDate(today));
+          setTaskModalEditingTask({
+            id: task.id,
+            text: task.text,
+            notes: task.note || '',
+            priority: task.priority,
+            dueDate: task.dueDate || formatDate(today) + 'T00:00:00',
+            reminder: 'none',
+            completed: task.completed,
+            subtasks: task.subtasks || [],
+            archived: task.archived,
+            category: task.category,
+          });
+          setShowTaskModal(true);
+        }}
+        activeOpacity={0.7}
+      >
+        <View style={styles.agendaTaskLeft}>
+          <View style={[
+            styles.agendaTaskDot,
+            { backgroundColor: PRIORITY_COLORS[task.priority as keyof typeof PRIORITY_COLORS].bg }
+          ]} />
+        </View>
+        <View style={styles.agendaTaskContent}>
+          <Text style={[
+            styles.agendaTaskTitle,
+            { color: theme === 'dark' ? '#fff' : '#111' }
+          ]} numberOfLines={1}>
+            {task.text}
+          </Text>
+          {task.note && (
+            <Text style={[
+              styles.agendaTaskNote,
+              { color: theme === 'dark' ? '#666' : '#666' }
+            ]} numberOfLines={1}>
+              {task.note}
+            </Text>
+          )}
+        </View>
+        <View style={styles.agendaTaskRight}>
+          <Text style={[
+            styles.agendaTaskTime,
+            { color: theme === 'dark' ? '#ff3b30' : '#ff3b30' }
+          ]}>
+            {task.dueDate && task.dueDate.length > 10 ? 
+              new Date(task.dueDate).toLocaleTimeString(undefined, { 
+                hour: 'numeric', 
+                minute: '2-digit',
+                hour12: true 
+              }) : 'All day'
+            }
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+
+    const renderDateSection = (dateStr: string) => {
+      const tasks = groupedTasks[dateStr];
+      return (
+        <View key={dateStr}>
+          {renderDateHeader(dateStr)}
+          <View style={styles.agendaTasksContainer}>
+            {tasks.map(renderTaskItem)}
+          </View>
+        </View>
+      );
+    };
+
+    return (
+      <View style={[styles.container, { backgroundColor: theme === 'dark' ? '#000000' : colors.background }]}> 
+        <FlatList
+          data={sortedDates}
+          keyExtractor={(dateStr) => dateStr}
+          renderItem={({ item }) => renderDateSection(item)}
+          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+          ListEmptyComponent={() => (
+            <View style={styles.agendaEmptyContainer}>
+              <Text style={[
+                styles.agendaEmptyText,
+                { color: theme === 'dark' ? '#666' : '#999' }
+              ]}>
+                No events
+              </Text>
+            </View>
+          )}
+          contentContainerStyle={styles.agendaContentContainer}
+          initialNumToRender={5}
+          maxToRenderPerBatch={5}
+          windowSize={3}
+        />
+      </View>
+    );
+  }, [agendaTasks, groupTasksByDate, formatDateForDisplay, theme, colors, today]);
 
   // Restore missing memoized variables and handlers
   const eventListTasks = useMemo(() => getTasksForDate(selectedDate), [selectedDate, getTasksForDate]);
@@ -671,12 +845,12 @@ const animateModalOut = useCallback(() => {
       setTasks(prev => prev.map(t => t.id === task.id ? { ...t, ...task } : t));
     } else {
       setTasks(prev => [
-        { ...task, id: Date.now().toString(), dueDate: task.dueDate || addTaskDate || selectedDate, archived: false },
+        { ...task, id: Date.now().toString(), dueDate: task.dueDate || selectedDate, archived: false },
         ...prev
       ]);
     }
     handleAddModalClose();
-  }, [addTaskDate, selectedDate, handleAddModalClose]);
+  }, [selectedDate, handleAddModalClose]);
 
   const handleTaskDelete = useCallback((task: TaskForm) => {
     setTasks(prev => prev.filter(t => t.id !== task.id));
@@ -721,8 +895,36 @@ const animateModalOut = useCallback(() => {
     }
   }, [showDayDetailModal]);
 
-  // Handler for saving a new task from TaskModal
+  // Handler for saving a new task from TaskModal (editing existing task)
   const handleTaskModalSave = (task: TaskData) => {
+    // Update existing task
+    setTasks(prev => prev.map(t => 
+      t.id === taskModalEditingTask?.id 
+        ? {
+            ...t,
+            text: task.text,
+            note: task.notes || '',
+            priority: task.priority,
+            dueDate: task.dueDate || t.dueDate,
+          }
+        : t
+    ));
+    setShowTaskModal(false);
+    // Clear state immediately to ensure clean state for next operation
+    setTaskModalDate(null);
+    setTaskModalEditingTask(null);
+  };
+
+  // Handler for closing TaskModal (editing)
+  const handleTaskModalClose = () => {
+    setShowTaskModal(false);
+    // Clear state immediately to ensure clean state for next operation
+    setTaskModalDate(null);
+    setTaskModalEditingTask(null);
+  };
+
+  // Handler for saving a new task from AddTaskModal
+  const handleAddTaskModalSave = (task: TaskData) => {
     // Convert TaskData to Task
     setTasks(prev => [
       {
@@ -731,23 +933,23 @@ const animateModalOut = useCallback(() => {
         note: task.notes || '',
         priority: task.priority,
         dueType: 'custom',
-        dueDate: task.dueDate || '',
+        dueDate: task.dueDate || addTaskModalDate || '',
         completed: false,
         subtasks: [],
         archived: false,
       },
       ...prev
     ]);
-    setShowTaskModal(false);
-    setTaskModalDate(null);
-    setTaskModalEditingTask(null);
+    setShowAddTaskModal(false);
+    // Clear state immediately to ensure clean state for next operation
+    setAddTaskModalDate(null);
   };
 
-  // Handler for closing TaskModal
-  const handleTaskModalClose = () => {
-    setShowTaskModal(false);
-    setTaskModalDate(null);
-    setTaskModalEditingTask(null);
+  // Handler for closing AddTaskModal
+  const handleAddTaskModalClose = () => {
+    setShowAddTaskModal(false);
+    // Clear state immediately to ensure clean state for next operation
+    setAddTaskModalDate(null);
   };
 
   // Add useEffect to animate modal in when modalVisible becomes true
@@ -907,8 +1109,8 @@ const animateModalOut = useCallback(() => {
                 <TouchableOpacity
                   onPress={() => {
                     if (modalDate) {
-                      setAddTaskDate(modalDate);
-                      setShowAddTask(true);
+                      setAddTaskModalDate(modalDate);
+                      setShowAddTaskModal(true);
                     }
                   }}
                   accessibilityLabel="Add Task"
@@ -935,20 +1137,39 @@ const animateModalOut = useCallback(() => {
                 data={modalTasks}
                 keyExtractor={keyExtractor}
                 renderItem={({ item }) => (
-                  <View style={{
-                    backgroundColor: theme === 'dark' ? '#232325' : '#f8f8fa',
-                    borderRadius: 14,
-                    marginHorizontal: 14,
-                    marginVertical: 6,
-                    paddingVertical: 14,
-                    paddingHorizontal: 18,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    shadowColor: '#000',
-                    shadowOpacity: 0.04,
-                    shadowRadius: 4,
-                    elevation: 1,
-                  }}>
+                  <TouchableOpacity
+                    style={{
+                      backgroundColor: theme === 'dark' ? '#232325' : '#f8f8fa',
+                      borderRadius: 14,
+                      marginHorizontal: 14,
+                      marginVertical: 6,
+                      paddingVertical: 14,
+                      paddingHorizontal: 18,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      shadowColor: '#000',
+                      shadowOpacity: 0.04,
+                      shadowRadius: 4,
+                      elevation: 1,
+                    }}
+                    onLongPress={() => {
+                      setTaskModalDate(item.dueDate?.slice(0, 10) || formatDate(today));
+                      setTaskModalEditingTask({
+                        id: item.id,
+                        text: item.text,
+                        notes: item.note || '',
+                        priority: item.priority,
+                        dueDate: item.dueDate || formatDate(today) + 'T00:00:00',
+                        reminder: 'none',
+                        completed: item.completed,
+                        subtasks: item.subtasks || [],
+                        archived: item.archived,
+                        category: item.category,
+                      });
+                      setShowTaskModal(true);
+                    }}
+                    activeOpacity={0.7}
+                  >
                     {/* Priority dot */}
                     <View style={{
                       width: 10,
@@ -963,7 +1184,7 @@ const animateModalOut = useCallback(() => {
                       color: theme === 'dark' ? '#fff' : '#18181a',
                       flex: 1,
                     }} numberOfLines={2}>{item.text}</Text>
-                  </View>
+                  </TouchableOpacity>
                 )}
                 ItemSeparatorComponent={() => <View style={{ height: 0 }} />}
                 ListEmptyComponent={() => (
@@ -984,50 +1205,22 @@ const animateModalOut = useCallback(() => {
               />
             </Animated.View>
           </Animated.View>
-        {/* Add TaskModal for long press on day */}
+        {/* TaskModal for editing existing tasks (long press) */}
         <TaskModal
           visible={showTaskModal}
           onClose={handleTaskModalClose}
           onSave={handleTaskModalSave}
           editingTask={taskModalEditingTask}
-          title={taskModalEditingTask ? 'Edit Task' : 'New Task'}
+          title="Edit Task"
           maxHeight={420}
         />
-        
-        {/* Add TaskModal for add button in day detail modal */}
+
+        {/* AddTaskModal for creating new tasks (plus button) */}
         <TaskModal
-          visible={showAddTask}
-          onClose={() => {
-            setShowAddTask(false);
-            setAddTaskDate(null);
-          }}
-          onSave={(task: TaskData) => {
-            // Add the new task
-            const newTask: Task = {
-              id: Date.now().toString(),
-              text: task.text,
-              note: task.notes,
-              priority: task.priority,
-              dueType: 'custom',
-              dueDate: addTaskDate || undefined,
-              completed: false,
-              subtasks: [],
-              archived: false,
-            };
-            setTasks(prev => [...prev, newTask]);
-            
-            // Close the modal
-            setShowAddTask(false);
-            setAddTaskDate(null);
-          }}
-          editingTask={addTaskDate ? {
-            text: '',
-            notes: '',
-            priority: 'None',
-            dueDate: addTaskDate + 'T00:00:00',
-            reminder: 'none',
-            completed: false,
-          } : null}
+          visible={showAddTaskModal}
+          onClose={handleAddTaskModalClose}
+          onSave={handleAddTaskModalSave}
+          editingTask={null}
           title="New Task"
           maxHeight={420}
         />
@@ -1404,6 +1597,95 @@ const styles = StyleSheet.create({
   closeModalBtnText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  agendaDateHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  agendaDateHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  agendaDateText: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  agendaTaskIndicator: {
+    backgroundColor: '#f2f2f7',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  agendaTaskCount: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  agendaTaskItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  agendaTaskLeft: {
+    marginRight: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  agendaTaskDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  agendaTaskContent: {
+    flex: 1,
+    flexDirection: 'column',
+  },
+  agendaTaskTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  agendaTaskNote: {
+    fontSize: 13,
+    fontWeight: '400',
+  },
+  agendaTaskRight: {
+    alignItems: 'flex-end',
+  },
+  agendaTaskTime: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  agendaEmptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  agendaEmptyText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  agendaContentContainer: {
+    paddingBottom: 100, // Add padding to the bottom to account for the bottom bar
+  },
+  agendaTasksContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
   },
 });
 
