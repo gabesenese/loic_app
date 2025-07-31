@@ -105,7 +105,7 @@ export default function InboxScreen() {
   });
 
   return (
-    <View style={[styles.container, { backgroundColor: isDark ? '#18181c' : '#fff', paddingTop: top + 32 }]}> 
+    <View style={[styles.container, { backgroundColor: isDark ? '#000000' : '#fff', paddingTop: top + 32 }]}> 
       <SmartLists selected={selectedList} onSelect={setSelectedList} counts={counts} />
       
       {/* Task List Container */}

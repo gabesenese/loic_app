@@ -428,7 +428,7 @@ export default function TodoScreen({ smartList = 'all' }: { smartList?: string }
             smartList.charAt(0).toUpperCase() + smartList.slice(1);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#18181c' : '#f3f4f6' }]}>
+          <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#000000' : '#f3f4f6' }]}>
       <View style={styles.mainContent}>
         <Header
           currentDate={currentDate}

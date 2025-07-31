@@ -647,7 +647,7 @@ const animateModalOut = useCallback(() => {
   ), [bottomBarWrapStyle, bottomBarBtnStyle, bottomBarBtnTextStyle, monthsOfYear, today]);
 
   const renderAgendaView = useCallback(() => (
-    <View style={[styles.container, { backgroundColor: theme === 'dark' ? '#000' : colors.background }]}> 
+    <View style={[styles.container, { backgroundColor: theme === 'dark' ? '#000000' : colors.background }]}> 
       <FlatList
         data={agendaTasks}
         keyExtractor={keyExtractor}
@@ -764,7 +764,7 @@ const animateModalOut = useCallback(() => {
 
   return (
     <Profiler id="CalendarScreen" onRender={onRenderCallback}>
-      <SafeAreaView style={[styles.container, { backgroundColor: theme === 'dark' ? '#000' : colors.background, flex: 1 }]}>  
+      <SafeAreaView style={[styles.container, { backgroundColor: theme === 'dark' ? '#000000' : colors.background, flex: 1 }]}>  
         {renderHeader()}
         {showAgenda ? (
           renderAgendaView()

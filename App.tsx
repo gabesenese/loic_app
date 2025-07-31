@@ -10,6 +10,8 @@ import { StatusBar } from 'expo-status-bar';
 import { View, Text, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+
+
 const Tab = createBottomTabNavigator();
 
 function ThemedTabs() {
@@ -35,7 +37,7 @@ function ThemedTabs() {
             height: 72,
             paddingBottom: 16,
             paddingTop: 8,
-            backgroundColor: isDark ? '#18181c' : '#fff',
+            backgroundColor: isDark ? '#000000' : '#fff',
             borderTopWidth: 1,
             borderTopColor: isDark ? '#333' : '#eee',
           },
