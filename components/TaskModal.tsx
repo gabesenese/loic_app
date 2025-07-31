@@ -722,6 +722,15 @@ export default function TaskModal({
   // Submit button animation
   const checkmarkOpacity = useRef(new Animated.Value(0)).current;
 
+  // Input focus animation values (similar to calendar modal)
+  const taskInputFocusScale = useRef(new Animated.Value(1)).current;
+  const taskInputFocusOpacity = useRef(new Animated.Value(1)).current;
+  const taskInputFocusTranslateY = useRef(new Animated.Value(0)).current;
+  
+  const notesInputFocusScale = useRef(new Animated.Value(1)).current;
+  const notesInputFocusOpacity = useRef(new Animated.Value(1)).current;
+  const notesInputFocusTranslateY = useRef(new Animated.Value(0)).current;
+
   // Refs
   const taskInputRef = useRef<TextInput>(null);
   const notesInputRef = useRef<TextInput>(null);
@@ -1063,7 +1072,7 @@ export default function TaskModal({
                   showsVerticalScrollIndicator={false}
                 >
                   {/* Task Input (keep as pill) */}
-                  <View style={[
+                  <Animated.View style={[
                     styles.inputContainer,
                     {
                       backgroundColor: isDark ? "#1c1c1e" : "#ffffff",
@@ -1076,6 +1085,11 @@ export default function TaskModal({
                       shadowOpacity: 0.12,
                       shadowRadius: 8,
                       elevation: 4,
+                      transform: [
+                        { scale: taskInputFocusScale },
+                        { translateY: taskInputFocusTranslateY }
+                      ],
+                      opacity: taskInputFocusOpacity,
                     },
                   ]}>
                     <TextInput
@@ -1129,9 +1143,45 @@ export default function TaskModal({
                         if (scrollViewRef.current) {
                           scrollViewRef.current.scrollTo({ y: 0, animated: true });
                         }
+                        Animated.parallel([
+                          Animated.spring(taskInputFocusScale, {
+                            toValue: 0.95,
+                            friction: 5,
+                            useNativeDriver: true,
+                          }),
+                          Animated.spring(taskInputFocusOpacity, {
+                            toValue: 0.8,
+                            friction: 5,
+                            useNativeDriver: true,
+                          }),
+                          Animated.spring(taskInputFocusTranslateY, {
+                            toValue: -10,
+                            friction: 5,
+                            useNativeDriver: true,
+                          }),
+                        ]).start();
+                      }}
+                      onBlur={() => {
+                        Animated.parallel([
+                          Animated.spring(taskInputFocusScale, {
+                            toValue: 1,
+                            friction: 5,
+                            useNativeDriver: true,
+                          }),
+                          Animated.spring(taskInputFocusOpacity, {
+                            toValue: 1,
+                            friction: 5,
+                            useNativeDriver: true,
+                          }),
+                          Animated.spring(taskInputFocusTranslateY, {
+                            toValue: 0,
+                            friction: 5,
+                            useNativeDriver: true,
+                          }),
+                        ]).start();
                       }}
                     />
-                  </View>
+                  </Animated.View>
                   {/* Smart Suggestions */}
                   {smartSuggestions.length > 0 && (
                     <View style={styles.suggestionsContainer}>
@@ -1320,7 +1370,7 @@ export default function TaskModal({
                     isDark={isDark}
                   />
                   {/* Notes Input (move to bottom, not pill) */}
-                  <View style={[styles.notesContainer, { backgroundColor: isDark ? "#1c1c1e" : "#ffffff", borderColor: "#535353ff", borderWidth: 0.5 }]}>
+                  <Animated.View style={[styles.notesContainer, { backgroundColor: isDark ? "#1c1c1e" : "#ffffff", borderColor: "#535353ff", borderWidth: 0.5, transform: [{ scale: notesInputFocusScale }, { translateY: notesInputFocusTranslateY }], opacity: notesInputFocusOpacity }]}>
                     <Ionicons
                       name="document-text-outline"
                       size={20}
@@ -1343,6 +1393,42 @@ export default function TaskModal({
                             scrollViewRef.current?.scrollToEnd({ animated: true });
                           }, 100); // Small delay to ensure keyboard is shown
                         }
+                        Animated.parallel([
+                          Animated.spring(notesInputFocusScale, {
+                            toValue: 0.95,
+                            friction: 5,
+                            useNativeDriver: true,
+                          }),
+                          Animated.spring(notesInputFocusOpacity, {
+                            toValue: 0.8,
+                            friction: 5,
+                            useNativeDriver: true,
+                          }),
+                          Animated.spring(notesInputFocusTranslateY, {
+                            toValue: -10,
+                            friction: 5,
+                            useNativeDriver: true,
+                          }),
+                        ]).start();
+                      }}
+                      onBlur={() => {
+                        Animated.parallel([
+                          Animated.spring(notesInputFocusScale, {
+                            toValue: 1,
+                            friction: 5,
+                            useNativeDriver: true,
+                          }),
+                          Animated.spring(notesInputFocusOpacity, {
+                            toValue: 1,
+                            friction: 5,
+                            useNativeDriver: true,
+                          }),
+                          Animated.spring(notesInputFocusTranslateY, {
+                            toValue: 0,
+                            friction: 5,
+                            useNativeDriver: true,
+                          }),
+                        ]).start();
                       }}
                     />
                     <Animated.View style={{ opacity: checkmarkOpacity }}>
@@ -1362,7 +1448,7 @@ export default function TaskModal({
                         <Ionicons name="checkmark-circle" size={22} color="#34c759" />
                       </TouchableOpacity>
                     </Animated.View>
-                  </View>
+                  </Animated.View>
                 </ScrollView>
               )}
             </View>
