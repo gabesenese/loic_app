@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TouchableWithoutFeedback, SafeAreaView, FlatList, Dimensions, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TouchableWithoutFeedback, SafeAreaView, FlatList, Dimensions, Platform, ActivityIndicator, Pressable} from 'react-native';
 import type { ListRenderItemInfo } from 'react-native';
 import { useTheme } from '../ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -109,7 +109,6 @@ const AVAILABLE_HEIGHT = SCREEN_HEIGHT - HEADER_HEIGHT - WEEKDAYS_HEIGHT - BOTTO
 const ROWS = 6; // Max rows in a month
 const DAY_CELL_HEIGHT = Math.floor(AVAILABLE_HEIGHT / ROWS);
 const MONTH_ITEM_HEIGHT = DAY_CELL_HEIGHT * ROWS;
-const MODAL_HEIGHT = 420;
 
 function getDaysInMonth(year: number, month: number): number {
   return new Date(year, month + 1, 0).getDate();
@@ -149,32 +148,21 @@ function getNumRowsForMonth(year: number, month: number): number {
   return Math.ceil(totalCells / 7);
 }
 
-// Add a custom double-tap handler
-function useDoubleTap(callback: () => void, delay = 250) {
-  const lastTap = useRef<number | null>(null);
-  return () => {
-    const now = Date.now();
-    if (lastTap.current && now - lastTap.current < delay) {
-      callback();
-    }
-    lastTap.current = now;
-  };
-}
 
 // Memoized DayCell component
-const DayCell = memo(({ cell, isTodayDate, dayTasks, handlePress, handleLongPress, isHighlighted }: {
+const DayCell = memo(({ cell, isTodayDate, dayTasks, handlePress, isHighlighted }: {
   cell: { date: string; isCurrentMonth: boolean };
   isTodayDate: boolean;
   dayTasks: any[];
   handlePress: () => void;
-  handleLongPress: () => void;
   isHighlighted: boolean;
+  handleLongPress?: () => void;
 }) => {
   const { theme } = useTheme();
   const colors = APPLE_COLORS[theme];
   return (
     <View style={styles.dayCellWrap}>
-      <TouchableWithoutFeedback onPress={handlePress} onLongPress={handleLongPress}>
+      <TouchableWithoutFeedback onPress={handlePress}>
         <View style={styles.dayCellTouchable}>
           <View style={[
             styles.dayCircle,
@@ -260,18 +248,6 @@ const MonthGrid = memo(({ days, firstDayOfWeek, numRows, getTasksForDate, isToda
                     isTodayDate={isTodayDate}
                     dayTasks={dayTasks}
                     handlePress={() => handleDayPress(cell.date)}
-                    handleLongPress={() => {
-                      setTaskModalDate(cell.date);
-                      setTaskModalEditingTask({
-                        text: '',
-                        notes: '',
-                        priority: 'None',
-                        dueDate: cell.date,
-                        reminder: 'none',
-                        completed: false,
-                      });
-                      setShowTaskModal(true);
-                    }}
                     isHighlighted={highlightedDate === cell.date && !isTodayDate}
                   />
                 );
@@ -285,6 +261,8 @@ const MonthGrid = memo(({ days, firstDayOfWeek, numRows, getTasksForDate, isToda
 });
 
 export default function CalendarScreen() {
+  const isMounted = useRef(true);
+  const isProcessingPendingDate = useRef(false);
   const { theme } = useTheme();
   const colors = APPLE_COLORS[theme];
 
@@ -321,6 +299,7 @@ export default function CalendarScreen() {
   const flatListRef = useRef<FlatList<any>>(null);
   const [showDayDetailModal, setShowDayDetailModal] = useState(false);
   const [modalDate, setModalDate] = useState<string | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
   const [visibleMonth, setVisibleMonth] = useState<{ year: number; month: number }>({
     year: today.getFullYear(),
     month: today.getMonth(),
@@ -328,8 +307,17 @@ export default function CalendarScreen() {
   // Double-tap state for all dates
   const lastTapRef = useRef<{ [date: string]: number }>({});
   
-  // Animation values for modal (Reanimated)
   // --- Reanimated modal animation ---
+  const MODAL_TRANSLATE_Y = SCREEN_HEIGHT * 0.7;
+  const MODAL_HEIGHT = SCREEN_HEIGHT * 0.5;
+  const MODAL_SCALE_START = 0.96;
+  const MODAL_SCALE_END = 1;
+  const MODAL_OPACITY_START = 0;
+  const MODAL_OPACITY_END = 1;
+  const MODAL_ANIMATION_DURATION = 260;
+  const MODAL_EASING = Easing.bezier(0.4, 0, 0.2, 1);
+
+  // Animation values for modal (Reanimated)
   const modalOpacity = useSharedValue(0);
   const modalScale = useSharedValue(0.8);
   const modalTranslateY = useSharedValue(MODAL_HEIGHT);
@@ -376,14 +364,6 @@ export default function CalendarScreen() {
   const [highlightedDate, setHighlightedDate] = useState<string | null>(null);
 
   // --- AddEditTaskModal and Day Detail Modal Apple-like Animation ---
-  const MODAL_TRANSLATE_Y = 40; // Shorter for popover feel
-  const MODAL_SCALE_START = 0.96;
-  const MODAL_SCALE_END = 1;
-  const MODAL_OPACITY_START = 0;
-  const MODAL_OPACITY_END = 1;
-  const MODAL_ANIMATION_DURATION = 260;
-  const MODAL_EASING = Easing.bezier(0.4, 0, 0.2, 1);
-
   const addModalOpacity = useSharedValue(MODAL_OPACITY_START);
   const addModalScale = useSharedValue(MODAL_SCALE_START);
   const addModalTranslateY = useSharedValue(MODAL_TRANSLATE_Y);
@@ -429,12 +409,18 @@ export default function CalendarScreen() {
   }, []);
 
   useEffect(() => {
+    isMounted.current = true;
     AsyncStorage.getItem(STORAGE_KEY).then((data) => {
-      if (data) setTasks(JSON.parse(data));
+      if (isMounted.current && data) setTasks(JSON.parse(data));
     });
+    return () => {
+      isMounted.current = false;
+    };
   }, []);
   useEffect(() => {
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+    if (isMounted.current) {
+      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+    }
   }, [tasks]);
 
   // 1. Build a map of tasks by date for O(1) lookup
@@ -454,29 +440,54 @@ export default function CalendarScreen() {
   const getTasksForDate = useCallback((dateStr: string) => tasksByDate[dateStr] || [], [tasksByDate]);
 
   // Animation functions for modal (Reanimated)
+  // Fix animateModalIn to prevent crashes
   const animateModalIn = useCallback(() => {
-    modalOpacity.value = withTiming(1, { duration: 200 });
-    modalScale.value = withSpring(1, { damping: 8, stiffness: 100 });
-    modalTranslateY.value = withSpring(0, { damping: 10, stiffness: 80 });
-  }, [modalOpacity, modalScale, modalTranslateY]);
-
-  const animateModalOut = useCallback(() => {
-    modalOpacity.value = withTiming(0, { duration: 100 });
-    modalScale.value = withTiming(0.98, { duration: 100 });
-    modalTranslateY.value = withTiming(MODAL_HEIGHT, { duration: 120 }, (finished) => {
-      if (finished) {
-        runOnJS(() => {
-          setShowDayDetailModal(false);
-          setShowAddTask(false); // Ensure add task modal is closed
-          setEditingTask(null);
-          if (pendingDate) {
-            actuallyHandleDayPress(pendingDate);
-            setPendingDate(null);
-          }
-        })();
+    try {
+      const duration = MODAL_ANIMATION_DURATION;
+      const easing = MODAL_EASING;
+      
+      // Ensure shared values are properly initialized
+      if (modalOpacity && modalScale && modalTranslateY) {
+        modalOpacity.value = withTiming(1, { duration, easing });
+        modalScale.value = withTiming(1, { duration, easing });
+        modalTranslateY.value = withTiming(0, { duration, easing });
       }
-    });
-  }, [modalOpacity, modalScale, modalTranslateY, pendingDate]);
+    } catch (error) {
+      console.log('Animation error:', error);
+    }
+  }, [modalOpacity, modalScale, modalTranslateY, MODAL_ANIMATION_DURATION, MODAL_EASING]);
+
+  // Add smooth close animation function
+const animateModalOut = useCallback(() => {
+  try {
+    const duration = MODAL_ANIMATION_DURATION;
+    const easing = MODAL_EASING;
+    
+    // Ensure shared values are properly initialized
+    if (modalOpacity && modalScale && modalTranslateY) {
+      modalOpacity.value = withTiming(0, { duration, easing });
+      modalScale.value = withTiming(0.95, { duration, easing });
+      modalTranslateY.value = withTiming(MODAL_HEIGHT, { duration, easing });
+      
+      // Use setTimeout to reset state after animation completes
+      setTimeout(() => {
+        if (isMounted.current) {
+          setModalVisible(false);
+          setHighlightedDate(null);
+          setModalDate(null);
+        }
+      }, duration);
+    }
+  } catch (error) {
+    console.log('Close animation error:', error);
+    // Fallback: just reset state immediately
+    if (isMounted.current) {
+      setModalVisible(false);
+      setHighlightedDate(null);
+      setModalDate(null);
+    }
+  }
+}, [modalOpacity, modalScale, modalTranslateY, MODAL_ANIMATION_DURATION, MODAL_EASING, setModalVisible, setHighlightedDate, setModalDate, MODAL_HEIGHT, isMounted]);
 
   // Animated styles for modal overlay and content
   const modalOverlayStyle = useAnimatedStyle(() => ({
@@ -490,49 +501,22 @@ export default function CalendarScreen() {
     ],
   }));
 
-  // Memoized handler for day press - show popover
+  // Simplify the modal state management to avoid crashes
+  // const [modalVisible, setModalVisible] = useState(false);
+
+  // Simplified handleDayPress that just sets the date and shows modal
   const handleDayPress = useCallback((date: string) => {
-    // If modal is open, close it first and queue the next date
-    if (showDayDetailModal) {
-      setPendingDate(date);
-      animateModalOut();
-      return;
-    }
-    actuallyHandleDayPress(date);
-  }, [getTasksForDate, showDayDetailModal, animateModalOut]);
+    setModalDate(date);
+    setHighlightedDate(!isToday(date) ? date : null);
+    setModalVisible(true);
+  }, [setModalDate, setHighlightedDate, setModalVisible]);
 
-  const actuallyHandleDayPress = (date: string) => {
-    const tasksForDate = getTasksForDate(date);
-    if (!isToday(date)) {
-      setHighlightedDate(date);
-    }
-    // Ensure only one modal is open at a time
-    setShowDayDetailModal(false);
-    setShowAddTask(false);
-    setEditingTask(null);
-    if (tasksForDate.length === 0) {
-      setAddTaskDate(date);
-      setShowAddTask(true);
-    } else {
-      setModalDate(date);
-      setShowDayDetailModal(true);
-    }
-  };
+  // Update closeModal to use smooth animation
+  const closeModal = useCallback(() => {
+    animateModalOut();
+  }, [animateModalOut]);
 
-  // Add useEffect to animate modal in when showDayDetailModal becomes true
-  useEffect(() => {
-    if (showDayDetailModal) {
-      animateModalIn();
-    }
-  }, [showDayDetailModal, animateModalIn]);
-
-  // Ensure pendingDate is handled after modal closes
-  useEffect(() => {
-    if (!showDayDetailModal && pendingDate) {
-      actuallyHandleDayPress(pendingDate);
-      setPendingDate(null);
-    }
-  }, [showDayDetailModal, pendingDate]);
+  // Remove the complex animateModalOut and animateModalIn functions
 
   // Memoized event card renderer for better performance
   const renderEventCard = useCallback(({ item }: { item: Task }) => (
@@ -543,9 +527,6 @@ export default function CalendarScreen() {
       <View style={styles.eventCardContent}>
         <Text style={[styles.eventCardTitle, { color: colors.text }]} numberOfLines={1}>{item.text}</Text>
         <View style={styles.eventCardMetaRow}>
-          {item.dueDate && (
-            <Text style={styles.eventCardTime}>{item.dueDate.split('T')[1]?.slice(0,5)}</Text>
-          )}
           {item.note && (
             <Text style={styles.eventCardLocation} numberOfLines={1}>{item.note}</Text>
           )}
@@ -584,13 +565,35 @@ export default function CalendarScreen() {
       <Text style={monthTitleStyle}>
         {showAgenda ? 'List' : `${monthNames[visibleMonth.month]} ${visibleMonth.year}`}
       </Text>
-      <TouchableOpacity
-        style={headerActionPillStyle}
-        onPress={handleToggleView}
-        accessibilityLabel={showAgenda ? 'Show Calendar View' : 'Show List View'}
-      >
-        <Ionicons name={showAgenda ? 'calendar-outline' : 'list-outline'} size={22} color={theme === 'dark' ? '#fff' : '#111'} />
-      </TouchableOpacity>
+      <View style={styles.headerActions}>
+        <TouchableOpacity
+          style={headerActionPillStyle}
+          onPress={() => {
+            // Open TaskModal for visible month and today's date (or first day of visible month)
+            const date = formatDate(new Date(visibleMonth.year, visibleMonth.month, today.getDate()));
+            setTaskModalDate(date);
+            setTaskModalEditingTask({
+              text: '',
+              notes: '',
+              priority: 'None',
+              dueDate: date + 'T00:00:00',
+              reminder: 'none',
+              completed: false,
+            });
+            setShowTaskModal(true);
+          }}
+          accessibilityLabel="Add Task"
+        >
+          <Ionicons name="add" size={22} color={theme === 'dark' ? '#fff' : '#111'} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={headerActionPillStyle}
+          onPress={handleToggleView}
+          accessibilityLabel={showAgenda ? 'Show Calendar View' : 'Show List View'}
+        >
+          <Ionicons name={showAgenda ? 'calendar-outline' : 'list-outline'} size={22} color={theme === 'dark' ? '#fff' : '#111'} />
+        </TouchableOpacity>
+      </View>
     </View>
   ), [headerWrapStyle, monthTitleStyle, showAgenda, visibleMonth, headerActionPillStyle, handleToggleView, theme]);
 
@@ -706,6 +709,11 @@ export default function CalendarScreen() {
       { translateY: dayModalTranslateY.value },
     ],
     opacity: dayModalOpacity.value,
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: MODAL_HEIGHT,
   }));
   useEffect(() => {
     if (showDayDetailModal) {
@@ -742,6 +750,18 @@ export default function CalendarScreen() {
     setTaskModalEditingTask(null);
   };
 
+  // Add useEffect to animate modal in when modalVisible becomes true
+  useEffect(() => {
+    if (modalVisible && isMounted.current) {
+      // Add a small delay to ensure state is stable
+      setTimeout(() => {
+        if (isMounted.current && modalVisible) {
+          animateModalIn();
+        }
+      }, 10);
+    }
+  }, [modalVisible, animateModalIn]);
+
   return (
     <Profiler id="CalendarScreen" onRender={onRenderCallback}>
       <SafeAreaView style={[styles.container, { backgroundColor: theme === 'dark' ? '#000' : colors.background, flex: 1 }]}>  
@@ -775,56 +795,195 @@ export default function CalendarScreen() {
               windowSize={3}
               initialScrollIndex={initialIndex}
             />
-            {/* Event list for selected day */}
-            <View style={[styles.eventListWrap, { paddingTop: 8 }]}>
-              <MemoizedEventList
-                tasks={eventListTasks}
-                keyExtractor={keyExtractor}
-                renderEventCard={renderEventCard}
-                ItemSeparator={ItemSeparator}
-                ListEmptyComponent={ListEmptyComponent}
-              />
-            </View>
+            {/* Event list for selected day (only when modal is not open and selected date is not today) */}
+            {!showDayDetailModal && selectedDate !== formatDate(today) && (
+              <View style={[styles.eventListWrap, { paddingTop: 8 }]}> 
+                <MemoizedEventList
+                  tasks={eventListTasks}
+                  keyExtractor={keyExtractor}
+                  renderEventCard={renderEventCard}
+                  ItemSeparator={ItemSeparator}
+                  ListEmptyComponent={ListEmptyComponent}
+                />
+              </View>
+            )}
           </>
         )}
         {/* Modal for day detail - Only rendered when visible */}
-        {showDayDetailModal && (
-          <Animated.View style={[styles.modalOverlay, dayModalOverlayStyle, { backgroundColor: 'rgba(0,0,0,0.18)' }]}> 
-            <TouchableWithoutFeedback
-              style={{ flex: 1, position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-              onPress={() => animateDayModalOut()}
+        <Animated.View
+          style={[
+            styles.modalOverlay,
+            modalOverlayStyle,
+            { 
+              display: modalVisible ? 'flex' : 'none',
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0,0,0,0.5)',
+              justifyContent: 'flex-end',
+              alignItems: 'center',
+            }
+          ]}
+        >
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={closeModal}
+            />
+            <Animated.View
+              style={[
+                styles.sheetModalContent,
+              modalContentStyle,
+                {
+                  backgroundColor: theme === 'dark' ? '#18181a' : '#fff',
+                  paddingHorizontal: 0,
+                  paddingTop: 12,
+                  paddingBottom: 0,
+                  borderTopLeftRadius: 24,
+                  borderTopRightRadius: 24,
+                  borderBottomLeftRadius: 0,
+                  borderBottomRightRadius: 0,
+                  shadowOpacity: 0.10,
+                  shadowRadius: 18,
+                  elevation: 12,
+                  width: '100%',
+                  maxWidth: undefined,
+                  marginBottom: 0,
+                height: MODAL_HEIGHT,
+                },
+              ]}
             >
-              <Animated.View style={[styles.sheetModalContent, dayModalContentStyle, { backgroundColor: theme === 'dark' ? '#000' : '#fff', padding: 32, borderRadius: 24, shadowOpacity: 0.08, shadowRadius: 16, elevation: 8 /*, fontFamily: Platform.OS === 'ios' ? 'SF Pro' : undefined*/ }]}> 
-                <View style={[styles.sheetHeader, { backgroundColor: theme === 'dark' ? '#000' : '#f3f4f6' }]}> 
-                  <Text style={[styles.sheetHeaderText, { color: theme === 'dark' ? '#fff' : '#222' }]}>Tasks for {modalDate}</Text>
-                  <TouchableOpacity
-                    onPress={() => { setShowDayDetailModal(false); setAddTaskDate(modalDate); setShowAddTask(true); }}
-                    style={[styles.closeModalBtn, { backgroundColor: theme === 'dark' ? '#000' : '#f3f4f6', borderColor: theme === 'dark' ? '#222' : 'transparent', borderWidth: theme === 'dark' ? 1 : 0 }]}
-                    accessibilityLabel="Add Task"
-                  >
-                    <Ionicons name="add" size={24} color={theme === 'dark' ? '#fff' : '#111'} />
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => animateDayModalOut()} style={[styles.closeModalBtn, { backgroundColor: theme === 'dark' ? '#000' : '#f3f4f6', borderColor: theme === 'dark' ? '#222' : 'transparent', borderWidth: theme === 'dark' ? 1 : 0 }]} accessibilityLabel="Close">
-                    <Ionicons name="close" size={22} color={theme === 'dark' ? '#fff' : '#111'} />
-                  </TouchableOpacity>
-                </View>
-                <View>
-                  <FlatList
-                    data={modalTasks}
-                    keyExtractor={keyExtractor}
-                    renderItem={renderEventCard}
-                    ItemSeparatorComponent={ItemSeparator}
-                    ListEmptyComponent={() => <Text style={eventListEmptyStyle}>No events</Text>}
-                    initialNumToRender={5} // Optimization: minimal render
-                    maxToRenderPerBatch={5}
-                    windowSize={3}
-                    removeClippedSubviews={true}
-                  />
-                </View>
-              </Animated.View>
-            </TouchableWithoutFeedback>
+              {/* Drag indicator */}
+              <View style={{ alignItems: 'center', marginBottom: 8 }}>
+                <View style={{ width: 36, height: 5, borderRadius: 3, backgroundColor: theme === 'dark' ? '#333' : '#e0e0e5', marginTop: 4, marginBottom: 2 }} />
+              </View>
+              {/* Date header */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, paddingHorizontal: 16 }}>
+                {/* Close button (left, Apple-style) */}
+                <TouchableOpacity
+                  onPress={closeModal}
+                  accessibilityLabel="Close"
+                  style={{
+                    backgroundColor: theme === 'dark' ? '#2c2c2e' : '#f2f2f7',
+                    borderRadius: 24,
+                    width: 40,
+                    height: 40,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    shadowColor: '#000',
+                    shadowOpacity: 0.1,
+                    shadowRadius: 2,
+                    shadowOffset: { width: 0, height: 1 },
+                    elevation: 2,
+                  }}
+                >
+                  <Ionicons name="close" size={18} color={theme === 'dark' ? '#fff' : '#000'} />
+                </TouchableOpacity>
+                
+                {/* Date header (center) */}
+                <Text style={{
+                  fontSize: 20,
+                  fontWeight: '700',
+                  fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
+                  color: theme === 'dark' ? '#fff' : '#18181a',
+                  flex: 1,
+                  textAlign: 'center',
+                  marginVertical: 6,
+                  marginHorizontal: 4,
+                }} numberOfLines={1}>
+                  {modalDate ? (() => {
+                    // Parse as local date to avoid timezone offset issues
+                    const [year, month, day] = modalDate.split('-').map(Number);
+                    if (year && month && day) {
+                      const localDate = new Date(year, month - 1, day);
+                      return localDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+                    }
+                    return '';
+                  })() : ''}
+                </Text>
+                
+                {/* Add button (right, Apple-style) */}
+                <TouchableOpacity
+                  onPress={() => {
+                    if (modalDate) {
+                      setAddTaskDate(modalDate);
+                      setShowAddTask(true);
+                    }
+                  }}
+                  accessibilityLabel="Add Task"
+                  style={{
+                    backgroundColor: theme === 'dark' ? '#0a84ff' : '#007aff',
+                    borderRadius: 24,
+                    width: 40,
+                    height: 40,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    shadowColor: theme === 'dark' ? '#0a84ff' : '#007aff',
+                    shadowOpacity: 0.3,
+                    shadowRadius: 4,
+                    shadowOffset: { width: 0, height: 2 },
+                    elevation: 4,
+                  }}
+                >
+                  <Ionicons name="add" size={20} color="#fff" />
+                </TouchableOpacity>
+              </View>
+              <View style={{ height: 1, backgroundColor: theme === 'dark' ? '#232325' : '#ececec', marginBottom: 2, marginHorizontal: 0 }} />
+              {/* Task list */}
+              <FlatList
+                data={modalTasks}
+                keyExtractor={keyExtractor}
+                renderItem={({ item }) => (
+                  <View style={{
+                    backgroundColor: theme === 'dark' ? '#232325' : '#f8f8fa',
+                    borderRadius: 14,
+                    marginHorizontal: 14,
+                    marginVertical: 6,
+                    paddingVertical: 14,
+                    paddingHorizontal: 18,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    shadowColor: '#000',
+                    shadowOpacity: 0.04,
+                    shadowRadius: 4,
+                    elevation: 1,
+                  }}>
+                    {/* Priority dot */}
+                    <View style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: 5,
+                      backgroundColor: PRIORITY_COLORS[item.priority as keyof typeof PRIORITY_COLORS].bg,
+                      marginRight: 12,
+                    }} />
+                    <Text style={{
+                      fontSize: 17,
+                      fontWeight: '600',
+                      color: theme === 'dark' ? '#fff' : '#18181a',
+                      flex: 1,
+                    }} numberOfLines={2}>{item.text}</Text>
+                  </View>
+                )}
+                ItemSeparatorComponent={() => <View style={{ height: 0 }} />}
+                ListEmptyComponent={() => (
+                  <Text style={{
+                    fontSize: 15,
+                    color: theme === 'dark' ? '#888' : '#b0b3b8',
+                    textAlign: 'center',
+                    marginTop: 32,
+                    fontWeight: '500',
+                  }}>No tasks for this day</Text>
+                )}
+                initialNumToRender={5}
+                maxToRenderPerBatch={5}
+                windowSize={3}
+                removeClippedSubviews={true}
+                style={{ minHeight: 120, maxHeight: 320, marginTop: 2, marginBottom: 12 }}
+                contentContainerStyle={{ paddingBottom: 12 }}
+              />
+            </Animated.View>
           </Animated.View>
-        )}
         {/* Add TaskModal for long press on day */}
         <TaskModal
           visible={showTaskModal}
@@ -832,6 +991,44 @@ export default function CalendarScreen() {
           onSave={handleTaskModalSave}
           editingTask={taskModalEditingTask}
           title={taskModalEditingTask ? 'Edit Task' : 'New Task'}
+          maxHeight={420}
+        />
+        
+        {/* Add TaskModal for add button in day detail modal */}
+        <TaskModal
+          visible={showAddTask}
+          onClose={() => {
+            setShowAddTask(false);
+            setAddTaskDate(null);
+          }}
+          onSave={(task: TaskData) => {
+            // Add the new task
+            const newTask: Task = {
+              id: Date.now().toString(),
+              text: task.text,
+              note: task.notes,
+              priority: task.priority,
+              dueType: 'custom',
+              dueDate: addTaskDate || undefined,
+              completed: false,
+              subtasks: [],
+              archived: false,
+            };
+            setTasks(prev => [...prev, newTask]);
+            
+            // Close the modal
+            setShowAddTask(false);
+            setAddTaskDate(null);
+          }}
+          editingTask={addTaskDate ? {
+            text: '',
+            notes: '',
+            priority: 'None',
+            dueDate: addTaskDate + 'T00:00:00',
+            reminder: 'none',
+            completed: false,
+          } : null}
+          title="New Task"
           maxHeight={420}
         />
         {renderBottomBar()}
