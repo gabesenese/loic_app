@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, Modal, TextInput, FlatList, KeyboardAvoidingView, Platform, TouchableWithoutFeedback } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import SmartLists from '../components/SmartLists';
+// FocusViews removed - functionality moved to Focus Zone
 import CalendarPopover from '../components/CalendarPopover';
 import { Ionicons } from '@expo/vector-icons';
 import { FontAwesome5 } from '@expo/vector-icons';
@@ -169,16 +169,16 @@ function isTaskForDate(task: Task, targetDate: Date): boolean {
   return taskDate.getTime() === targetDate.getTime();
 }
 
-function filterTasks(tasks: Task[], smartList: string): Task[] {
-  if (smartList === 'archive') return tasks.filter(t => t.archived);
+function filterTasks(tasks: Task[], focusView: string): Task[] {
+  if (focusView === 'archive') return tasks.filter(t => t.archived);
   return tasks.filter(t => !t.archived && (
-    smartList === 'all' ? true :
-      smartList === 'important' ? t.priority === 'High' :
-        smartList === 'today' ? isToday(t.dueDate) :
-          smartList === 'tomorrow' ? isTomorrow(t.dueDate) :
-            smartList === 'work' ? t.category === 'work' :
-              smartList === 'personal' ? t.category === 'personal' :
-                smartList === 'week' ? isThisWeek(t.dueDate) :
+    focusView === 'all' ? true :
+      focusView === 'important' ? t.priority === 'High' :
+        focusView === 'today' ? isToday(t.dueDate) :
+          focusView === 'tomorrow' ? isTomorrow(t.dueDate) :
+            focusView === 'work' ? t.category === 'work' :
+              focusView === 'personal' ? t.category === 'personal' :
+                focusView === 'week' ? isThisWeek(t.dueDate) :
                   true
   ));
 }
@@ -341,7 +341,7 @@ const SettingsModal = ({ visible, onClose }: { visible: boolean, onClose: () => 
   </Modal>
 );
 
-export default function TodoScreen({ smartList = 'all' }: { smartList?: string }) {
+export default function TodoScreen({ focusView = 'all' }: { focusView?: string }) {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const [addModalVisible, setAddModalVisible] = useState(false);
@@ -418,14 +418,14 @@ export default function TodoScreen({ smartList = 'all' }: { smartList?: string }
     setTasks(prev => prev.filter(t => t.id !== id));
   };
 
-  let filteredTasks = filterTasks(tasks, smartList);
+  let filteredTasks = filterTasks(tasks, focusView);
   filteredTasks = filteredTasks.filter(t => isTaskForDate(t, currentDate));
-  const headerTitle =
-    smartList === 'all' ? 'All Tasks' :
-      smartList === 'today' ? 'Today' :
-        smartList === 'important' ? 'Important' :
-          smartList === 'week' ? 'This Week' :
-            smartList.charAt(0).toUpperCase() + smartList.slice(1);
+    const headerTitle = 
+    focusView === 'all' ? 'All Tasks' :
+    focusView === 'today' ? 'Today' :
+    focusView === 'important' ? 'Important' :
+    focusView === 'week' ? 'This Week' :
+    focusView.charAt(0).toUpperCase() + focusView.slice(1);
 
   return (
           <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#000000' : '#f3f4f6' }]}>

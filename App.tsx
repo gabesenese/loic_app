@@ -26,7 +26,7 @@ function ThemedTabs() {
           headerShown: false,
           tabBarIcon: ({ color, size }) => {
             let iconName: any = 'list-outline';
-            if (route.name === 'Inbox') iconName = 'mail-outline';
+            if (route.name === 'Focus Zone') iconName = 'bulb-outline';
             else if (route.name === 'Tasks') iconName = 'list-outline';
             else if (route.name === 'Calendar') iconName = 'calendar-outline';
             else if (route.name === 'Settings') iconName = 'settings-outline';
@@ -43,9 +43,9 @@ function ThemedTabs() {
           },
         })}
       >
-        <Tab.Screen name="Inbox" component={InboxScreen} />
+        <Tab.Screen name="Focus Zone" component={InboxScreen} />
         <Tab.Screen name="Tasks">
-          {() => <TodoScreen smartList="all" />}
+          {() => <TodoScreen focusView="all" />}
         </Tab.Screen>
         <Tab.Screen name="Calendar" component={CalendarScreen} />
         <Tab.Screen name="Settings" component={SettingsScreen} />
