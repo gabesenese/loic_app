@@ -4,7 +4,7 @@ import TodoScreen from './screens/TodoScreen';
 import { Ionicons } from '@expo/vector-icons';
 import CalendarScreen from './screens/CalendarScreen';
 import SettingsScreen from './screens/SettingsScreen';
-import InboxScreen from './screens/InboxScreen';
+import FocusScreen from './screens/FocusScreen';
 import { ThemeProvider, useTheme } from './ThemeContext';
 import { StatusBar } from 'expo-status-bar';
 import { View, Text, Platform } from 'react-native';
@@ -43,7 +43,7 @@ function ThemedTabs() {
           },
         })}
       >
-        <Tab.Screen name="Focus Zone" component={InboxScreen} />
+        <Tab.Screen name="Focus Zone" component={FocusScreen} />
         <Tab.Screen name="Tasks">
           {() => <TodoScreen focusView="all" />}
         </Tab.Screen>

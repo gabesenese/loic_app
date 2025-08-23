@@ -50,79 +50,25 @@ const PRIORITY_COLORS = {
   }
 };
 
-function renderRightActions(progress: any, dragX: any, onDelete: () => void) {
-  try {
-    // Smooth scale animation
-    const scale = progress.interpolate({
-      inputRange: [0, 0.2, 1],
-      outputRange: [0.8, 1, 1],
-      extrapolate: 'clamp',
-    });
+import { interpolate } from 'react-native-reanimated';
 
-    // Smooth opacity animation
-    const opacity = progress.interpolate({
-      inputRange: [0, 0.15, 1],
-      outputRange: [0, 1, 1],
-      extrapolate: 'clamp',
-    });
+const renderRightActions = (progress: any, dragX: any, onDelete: () => void) => {
+  const scale = dragX.interpolate({
+    inputRange: [-80, 0],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
 
-    // Slide in animation from right
-    const translateX = progress.interpolate({
-      inputRange: [0, 0.3, 1],
-      outputRange: [80, 20, 0],
-      extrapolate: 'clamp',
-    });
-
-    // Border radius animation - starts rounded and becomes more rounded as it merges
-    const borderRadius = progress.interpolate({
-      inputRange: [0, 0.5, 1],
-      outputRange: [20, 12, 10],
-      extrapolate: 'clamp',
-    });
-
-    // Ensure all values are numbers
-    const scaleValue = typeof scale === 'number' ? scale : 1;
-    const opacityValue = typeof opacity === 'number' ? opacity : 1;
-    const translateXValue = typeof translateX === 'number' ? translateX : 0;
-    const borderRadiusValue = typeof borderRadius === 'number' ? borderRadius : 10;
-
-    return (
-      <Animated.View
-        style={[
-          styles.deleteButton,
-          {
-            opacity: opacityValue,
-            transform: [
-              { scale: scaleValue },
-              { translateX: translateXValue }
-            ],
-            borderRadius: borderRadiusValue,
-          }
-        ]}
-      >
-        <TouchableOpacity
-          onPress={onDelete}
-          style={[
-            styles.deleteButtonTouchable,
-            { borderRadius: borderRadiusValue }
-          ]}
-        >
-          <Ionicons name="trash" size={24} color="#d32f2f" />
-        </TouchableOpacity>
-      </Animated.View>
-    );
-  } catch (error) {
-    console.warn('[TodoScreen] Error in renderRightActions:', error);
-    // Fallback to static values
-    return (
-      <Animated.View style={[styles.deleteButton, { opacity: 1, transform: [{ scale: 1 }] }]}>
-        <TouchableOpacity onPress={onDelete} style={styles.deleteButtonTouchable}>
-          <Ionicons name="trash" size={24} color="#d32f2f" />
-        </TouchableOpacity>
-      </Animated.View>
-    );
-  }
-}
+  return (
+    <TouchableOpacity onPress={onDelete} activeOpacity={0.7}>
+      <View style={styles.deleteButton}>
+        <Animated.View style={{ transform: [{ scale }] }}>
+          <Ionicons name="trash" size={24} color="white" />
+        </Animated.View>
+      </View>
+    </TouchableOpacity>
+  );
+};
 
 function isToday(dateStr?: string) {
   if (!dateStr) return false;
@@ -310,8 +256,15 @@ const AddTaskModal = ({ visible, onClose, onAdd }: { visible: boolean, onClose: 
   const [text, setText] = useState('');
   return (
     <Modal visible={visible} animationType="slide" transparent>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modal}>
-        <View style={styles.modalContent}>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+        style={styles.modal}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <TouchableWithoutFeedback onPress={onClose}>
+          <View style={styles.modalOverlay} />
+        </TouchableWithoutFeedback>
+        <View style={[styles.modalContent, { marginTop: 'auto', marginBottom: Platform.OS === 'ios' ? 20 : 40 }]}>
           <Text style={styles.modalTitle}>Add Task</Text>
           <TextInput
             style={styles.input}
@@ -319,6 +272,14 @@ const AddTaskModal = ({ visible, onClose, onAdd }: { visible: boolean, onClose: 
             value={text}
             onChangeText={setText}
             autoFocus
+            returnKeyType="done"
+            onSubmitEditing={() => {
+              if (text.trim()) {
+                onAdd(text.trim());
+                setText('');
+                onClose();
+              }
+            }}
           />
           <View style={styles.modalActions}>
             <TouchableOpacity onPress={onClose} style={styles.cancelBtn}><Text>Cancel</Text></TouchableOpacity>
@@ -628,7 +589,14 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   modal: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  modalContent: { backgroundColor: '#fff', borderRadius: 12, padding: 24, width: 300 },
+  modalOverlay: { 
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  modalContent: { backgroundColor: '#fff', borderRadius: 12, padding: 24, width: 300, maxWidth: '90%' },
   modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' },
   input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, marginBottom: 16, fontSize: 16 },
   modalActions: { flexDirection: 'row', justifyContent: 'space-between' },
