@@ -40,7 +40,6 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
     setManualTheme(newTheme);
     try {
       await AsyncStorage.setItem('theme_preference', JSON.stringify({ manualTheme: newTheme }));
-      Appearance.setColorScheme(newTheme);
     } catch (e) {
       // ignore
     }
