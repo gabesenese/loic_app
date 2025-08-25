@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import CalendarScreen from './screens/CalendarScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import FocusScreen from './screens/FocusScreen';
+import LiquidGlassExample from './screens/LiquidGlassExample';
 import { ThemeProvider, useTheme } from './ThemeContext';
 import { StatusBar } from 'expo-status-bar';
 import { View, Text, Platform } from 'react-native';
@@ -30,6 +31,7 @@ function ThemedTabs() {
             else if (route.name === 'Tasks') iconName = 'list-outline';
             else if (route.name === 'Calendar') iconName = 'calendar-outline';
             else if (route.name === 'Settings') iconName = 'settings-outline';
+            else if (route.name === 'Glass Test') iconName = 'diamond-outline';
             return <Ionicons name={iconName} size={size + 4} color={color} />;
           },
           tabBarShowLabel: false,
@@ -49,6 +51,7 @@ function ThemedTabs() {
           {() => <TodoScreen focusView="all" />}
         </Tab.Screen>
         <Tab.Screen name="Calendar" component={CalendarScreen} />
+        <Tab.Screen name="Glass Test" component={LiquidGlassExample} />
         <Tab.Screen name="Settings" component={SettingsScreen} />
       </Tab.Navigator>
     </>
