@@ -729,7 +729,6 @@ export default function TaskModal({
   
   const notesInputFocusScale = useRef(new Animated.Value(1)).current;
   const notesInputFocusOpacity = useRef(new Animated.Value(1)).current;
-  const notesInputFocusTranslateY = useRef(new Animated.Value(0)).current;
 
   // Refs
   const taskInputRef = useRef<TextInput>(null);
@@ -740,43 +739,29 @@ export default function TaskModal({
   const modalContentRef = useRef<any>(null);
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // Keyboard animation setup
+  // Keyboard handling - Simple position adjustment without complex animations
   useEffect(() => {
     const keyboardWillShow = Keyboard.addListener(
       'keyboardWillShow', 
       (e) => {
-        Animated.parallel([
-          Animated.timing(keyboardHeight, {
-            toValue: e.endCoordinates.height,
-            duration: 300,
-            easing: Easing.out(Easing.ease),
-            useNativeDriver: false,
-          }),
-          Animated.timing(contentOpacity, {
-            toValue: 0.98,
-            duration: 300,
-            useNativeDriver: true,
-          })
-        ]).start();
+        // Simple, stable adjustment for keyboard
+        Animated.timing(keyboardHeight, {
+          toValue: e.endCoordinates.height * 0.5, // Move up by half keyboard height for better visibility
+          duration: 250, // Shorter, smoother duration
+          useNativeDriver: false,
+        }).start();
       }
     );
 
     const keyboardWillHide = Keyboard.addListener(
       'keyboardWillHide', 
       () => {
-        Animated.parallel([
-          Animated.timing(keyboardHeight, {
-            toValue: 0,
-            duration: 400,
-            easing: Easing.out(Easing.cubic),
-            useNativeDriver: false,
-          }),
-          Animated.timing(contentOpacity, {
-            toValue: 1,
-            duration: 400,
-            useNativeDriver: true,
-          })
-        ]).start();
+        // Return to original position
+        Animated.timing(keyboardHeight, {
+          toValue: 0,
+          duration: 250, // Consistent duration
+          useNativeDriver: false,
+        }).start();
       }
     );
 
@@ -1057,8 +1042,17 @@ export default function TaskModal({
               </TouchableOpacity>
             </View>
           </SafeAreaView>
-          <Animated.View style={[styles.contentArea, { flex: 1, backgroundColor: isDark ? "#1c1c1e" : "#ffffff", opacity: contentOpacity }]}>
-            <View ref={modalContentRef} style={{ flex: 1 }}>
+          <Animated.View style={[styles.contentArea, { flex: 1, backgroundColor: isDark ? "#1c1c1e" : "#ffffff" }]}>
+            <TouchableWithoutFeedback onPress={() => {
+              // Dismiss keyboard when tapping in content area but outside inputs
+              if (taskInputRef.current) {
+                taskInputRef.current.blur();
+              }
+              if (notesInputRef.current) {
+                notesInputRef.current.blur();
+              }
+            }}>
+              <View ref={modalContentRef} style={{ flex: 1 }}>
               {children !== undefined && children !== null ? (
                 <View style={styles.childrenContainer}>
                   {renderChildrenSafely()}
@@ -1067,9 +1061,12 @@ export default function TaskModal({
                 <ScrollView
                   ref={scrollViewRef}
                   style={[styles.scrollContent, { flex: 1 }]}
-                  contentContainerStyle={{ ...styles.scrollContentContainer, flexGrow: 1 }}
+                  contentContainerStyle={{ ...styles.scrollContentContainer, flexGrow: 1, paddingBottom: 20 }}
                   keyboardShouldPersistTaps="handled"
                   showsVerticalScrollIndicator={false}
+                  scrollEventThrottle={16}
+                  bounces={true}
+                  overScrollMode="auto"
                 >
                   {/* Task Input (keep as pill) */}
                   <Animated.View style={[
@@ -1092,8 +1089,10 @@ export default function TaskModal({
                       opacity: taskInputFocusOpacity,
                     },
                   ]}>
-                    <TextInput
-                      ref={taskInputRef}
+                    <TouchableWithoutFeedback onPress={() => {}}>
+                      <View style={{ flex: 1 }}>
+                        <TextInput
+                          ref={taskInputRef}
                       style={[
                         styles.taskInput,
                         { color: isDark ? "#ffffff" : "#000000", fontWeight: 'normal', fontSize: 16 }
@@ -1134,10 +1133,21 @@ export default function TaskModal({
                         const contextSubtasks = generateSmartSubtasks(clean);
                         setSmartSubtaskSuggestions(contextSubtasks);
                       }}
-                      multiline
-                      textAlignVertical="top"
+                      multiline={false}
+                      numberOfLines={1}
+                      textAlignVertical="center"
                       autoCorrect={true}
                       autoCapitalize="words"
+                      blurOnSubmit={false}
+                      selectTextOnFocus={false}
+                      enablesReturnKeyAutomatically={true}
+                      keyboardAppearance={isDark ? "dark" : "light"}
+                      scrollEnabled={false}
+                      editable={true}
+                      returnKeyType="next"
+                      onSubmitEditing={() => {
+                        notesInputRef.current?.focus();
+                      }}
                       onFocus={() => {
                         // Scroll to the top for task input
                         if (scrollViewRef.current) {
@@ -1181,6 +1191,8 @@ export default function TaskModal({
                         ]).start();
                       }}
                     />
+                      </View>
+                    </TouchableWithoutFeedback>
                   </Animated.View>
                   {/* Smart Suggestions */}
                   {smartSuggestions.length > 0 && (
@@ -1370,46 +1382,53 @@ export default function TaskModal({
                     isDark={isDark}
                   />
                   {/* Notes Input (move to bottom, not pill) */}
-                  <Animated.View style={[styles.notesContainer, { backgroundColor: isDark ? "#1c1c1e" : "#ffffff", borderColor: "#535353ff", borderWidth: 0.5, transform: [{ scale: notesInputFocusScale }, { translateY: notesInputFocusTranslateY }], opacity: notesInputFocusOpacity }]}>
-                    <Ionicons
-                      name="document-text-outline"
-                      size={20}
-                      color={isDark ? "#8e8e93" : "#6b7280"}
-                      style={{ marginRight: 10 }}
-                    />
-                    <TextInput
-                      ref={notesInputRef}
-                      style={[styles.notesInput, { color: isDark ? "#ffffff" : "#000000" }]}
-                      placeholder="Add notes..."
-                      placeholderTextColor={isDark ? "#8e8e93" : "#6b7280"}
-                      value={notes}
-                      onChangeText={setNotes}
-                      multiline
-                      textAlignVertical="top"
-                      onFocus={() => {
-                        // Scroll to the bottom to show the notes input above keyboard
-                        if (scrollViewRef.current) {
-                          setTimeout(() => {
-                            scrollViewRef.current?.scrollToEnd({ animated: true });
-                          }, 100); // Small delay to ensure keyboard is shown
-                        }
-                        Animated.parallel([
-                          Animated.spring(notesInputFocusScale, {
-                            toValue: 0.95,
-                            friction: 5,
-                            useNativeDriver: true,
-                          }),
-                          Animated.spring(notesInputFocusOpacity, {
-                            toValue: 0.8,
-                            friction: 5,
-                            useNativeDriver: true,
-                          }),
-                          Animated.spring(notesInputFocusTranslateY, {
-                            toValue: -10,
-                            friction: 5,
-                            useNativeDriver: true,
-                          }),
-                        ]).start();
+                  <TouchableWithoutFeedback onPress={() => {
+                    // Focus the notes input when tapping anywhere on the container
+                    if (notesInputRef.current) {
+                      notesInputRef.current.focus();
+                    }
+                  }}>
+                    <Animated.View style={[styles.notesContainer, { backgroundColor: isDark ? "#1c1c1e" : "#ffffff", borderColor: "#535353ff", borderWidth: 0.5, transform: [{ scale: notesInputFocusScale }], opacity: notesInputFocusOpacity }]}>
+                      <Ionicons
+                        name="document-text-outline"
+                        size={20}
+                        color={isDark ? "#8e8e93" : "#6b7280"}
+                        style={{ marginRight: 12 }}
+                      />
+                      <TouchableWithoutFeedback onPress={() => {}}>
+                        <View style={{ flex: 1 }}>
+                        <TextInput
+                          ref={notesInputRef}
+                          style={[styles.notesInput, { color: isDark ? "#ffffff" : "#000000" }]}
+                          placeholder="Add notes..."
+                          placeholderTextColor={isDark ? "#a1a1aa" : "#6b7280"}
+                          value={notes}
+                          onChangeText={setNotes}
+                          multiline={false}
+                          textAlignVertical="center"
+                          blurOnSubmit={true}
+                          selectTextOnFocus={false}
+                          enablesReturnKeyAutomatically={true}
+                          keyboardAppearance={isDark ? "dark" : "light"}
+                          returnKeyType="done"
+                          autoCorrect={true}
+                          autoCapitalize="sentences"
+                          onFocus={() => {
+                            // Simple focus animations similar to task input
+                            Animated.parallel([
+                              Animated.spring(notesInputFocusScale, {
+                                toValue: 0.98,
+                                friction: 6,
+                                tension: 120,
+                                useNativeDriver: true,
+                              }),
+                              Animated.spring(notesInputFocusOpacity, {
+                                toValue: 0.85,
+                                friction: 6,
+                                tension: 120,
+                                useNativeDriver: true,
+                              }),
+                          ]).start();
                       }}
                       onBlur={() => {
                         Animated.parallel([
@@ -1423,20 +1442,22 @@ export default function TaskModal({
                             friction: 5,
                             useNativeDriver: true,
                           }),
-                          Animated.spring(notesInputFocusTranslateY, {
-                            toValue: 0,
-                            friction: 5,
-                            useNativeDriver: true,
-                          }),
                         ]).start();
                       }}
                     />
+                      </View>
+                    </TouchableWithoutFeedback>
                     <Animated.View style={{ opacity: checkmarkOpacity }}>
                       <TouchableOpacity
                         onPress={() => {
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                          Keyboard.dismiss();
-                          // Optional: save notes or clear input
+                          if (notes.trim()) {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                            // Add the note (you can extend this functionality as needed)
+                            console.log('Adding note:', notes);
+                            // Optional: clear the input after adding
+                            setNotes('');
+                            Keyboard.dismiss();
+                          }
                         }}
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                         style={{
@@ -1445,13 +1466,15 @@ export default function TaskModal({
                           alignItems: 'center',
                         }}
                       >
-                        <Ionicons name="checkmark-circle" size={22} color="#34c759" />
+                        <Ionicons name="add-circle" size={28} color={notes.trim() ? "#007AFF" : (isDark ? "#8e8e93" : "#6b7280")} />
                       </TouchableOpacity>
                     </Animated.View>
                   </Animated.View>
+                  </TouchableWithoutFeedback>
                 </ScrollView>
               )}
             </View>
+            </TouchableWithoutFeedback>
           </Animated.View>
           {/* Dropdowns */}
           <Dropdown
@@ -1611,11 +1634,17 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   notesInput: {
-    fontSize: 15,
+    fontSize: 17,
+    fontWeight: '400',
     flex: 1,
     backgroundColor: 'transparent',
     borderWidth: 0,
     padding: 0,
+    paddingVertical: 10,
+    height: 40,
+    lineHeight: 22,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
   pill: {
     flexDirection: "row",
@@ -1728,6 +1757,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginTop: 8,
     paddingHorizontal: 20,
+    paddingVertical: 0,
     borderWidth: 1,
     borderColor: '#e5e5ea',
     backgroundColor: '#fff',
