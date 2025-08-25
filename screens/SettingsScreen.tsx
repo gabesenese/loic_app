@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Switch, Platform, TextInput, TouchableOpacity, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, Switch, TextInput, Platform, Alert, InteractionManager } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../ThemeContext';
@@ -91,21 +91,25 @@ export default function SettingsScreen() {
 
   // Load settings from storage
   useEffect(() => {
-    AsyncStorage.getItem(NOTIFICATIONS_KEY).then(val => {
-      if (val !== null) setNotificationsEnabled(val === 'true');
-    });
-    AsyncStorage.getItem(AUTO_ARCHIVE_KEY).then(val => {
-      if (val !== null) setAutoArchive(val === 'true');
-    });
-    AsyncStorage.getItem(ARCHIVE_DAYS_KEY).then(val => {
-      if (val !== null) {
-        const days = parseInt(val, 10);
-        if (days >= 1) {
-          setArchiveDays(days);
-          setArchiveDaysInput(days.toString());
+    const task = InteractionManager.runAfterInteractions(() => {
+      AsyncStorage.getItem(NOTIFICATIONS_KEY).then(val => {
+        if (val !== null) setNotificationsEnabled(val === 'true');
+      });
+      AsyncStorage.getItem(AUTO_ARCHIVE_KEY).then(val => {
+        if (val !== null) setAutoArchive(val === 'true');
+      });
+      AsyncStorage.getItem(ARCHIVE_DAYS_KEY).then(val => {
+        if (val !== null) {
+          const days = parseInt(val, 10);
+          if (days >= 1) {
+            setArchiveDays(days);
+            setArchiveDaysInput(days.toString());
+          }
         }
-      }
+      });
     });
+    
+    return () => task.cancel();
   }, []);
 
   // Save settings to storage

@@ -41,6 +41,7 @@ function ThemedTabs() {
             borderTopWidth: 1,
             borderTopColor: isDark ? '#333' : '#eee',
           },
+          lazy: false, // Disable lazy loading to prevent navigation stutter
         })}
       >
         <Tab.Screen name="Focus Zone" component={FocusScreen} />

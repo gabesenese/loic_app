@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TouchableWithoutFeedback, SafeAreaView, FlatList, Dimensions, Platform, ActivityIndicator, Pressable} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TouchableWithoutFeedback, SafeAreaView, FlatList, Dimensions, Platform, ActivityIndicator, Pressable, InteractionManager} from 'react-native';
 import type { ListRenderItemInfo } from 'react-native';
 import { useTheme } from '../ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -284,9 +284,13 @@ export default function CalendarScreen() {
   const headerActionPillStyle = useMemo(() => [styles.headerActionPill, { backgroundColor: theme === 'dark' ? '#000' : '#f3f4f6', borderColor: theme === 'dark' ? '#222' : 'transparent', borderWidth: theme === 'dark' ? 1 : 0 }], [theme]);
   const weekdaysRowStyle = useMemo(() => [styles.weekdaysRow], []);
   const weekdayTextStyle = useMemo(() => [styles.weekdayText, { color: theme === 'dark' ? '#fff' : '#111' }], [theme]);
-  const bottomBarWrapStyle = useMemo(() => [styles.bottomBarWrap, { backgroundColor: theme === 'dark' ? '#000' : 'rgba(255,255,255,0.95)', borderTopWidth: theme === 'dark' ? 1 : 0, borderTopColor: theme === 'dark' ? '#222' : 'transparent' }], [theme]);
-  const bottomBarBtnStyle = useMemo(() => [styles.bottomBarBtn, { backgroundColor: theme === 'dark' ? '#000' : '#fff', borderColor: theme === 'dark' ? '#222' : 'transparent', borderWidth: theme === 'dark' ? 1 : 0 }], [theme]);
-  const bottomBarBtnTextStyle = useMemo(() => [styles.bottomBarBtnText, { color: theme === 'dark' ? '#fff' : '#111' }], [theme]);
+  const bottomBarWrapStyle = useMemo(() => [styles.bottomBarWrap], [theme]);
+  const bottomBarBtnStyle = useMemo(() => [styles.bottomBarBtn, { 
+    backgroundColor: theme === 'dark' ? '#1c1c1e' : '#f2f2f7', 
+    borderColor: theme === 'dark' ? '#333' : '#e5e5ea', 
+    borderWidth: 1 
+  }], [theme]);
+  const bottomBarBtnTextStyle = useMemo(() => [styles.bottomBarBtnText, { color: theme === 'dark' ? '#ffffff' : '#000000' }], [theme]);
   const eventListWrapStyle = useMemo(() => [styles.eventListWrap, { padding: 16 }], []);
   const eventListEmptyStyle = useMemo(() => [styles.eventListEmpty, { color: theme === 'dark' ? '#fff' : '#222' }], [theme]);
   
@@ -410,10 +414,14 @@ export default function CalendarScreen() {
 
   useEffect(() => {
     isMounted.current = true;
-    AsyncStorage.getItem(STORAGE_KEY).then((data) => {
-      if (isMounted.current && data) setTasks(JSON.parse(data));
+    const task = InteractionManager.runAfterInteractions(() => {
+      AsyncStorage.getItem(STORAGE_KEY).then((data) => {
+        if (isMounted.current && data) setTasks(JSON.parse(data));
+      });
     });
+    
     return () => {
+      task.cancel();
       isMounted.current = false;
     };
   }, []);
@@ -1438,7 +1446,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 18,
     paddingBottom: Platform.OS === 'ios' ? 24 : 12,
-    paddingTop: 8,
+    paddingTop: 16,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     shadowColor: '#000',
@@ -1447,18 +1455,26 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   bottomBarBtn: {
-    borderRadius: 18,
-    paddingHorizontal: 24,
-    paddingVertical: 10,
+    borderRadius: 20,
+    paddingHorizontal: 28,
+    paddingVertical: 12,
     shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+    minWidth: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   bottomBarBtnText: {
-    fontSize: 18,
-    fontWeight: '700',
-    fontFamily: 'System',
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    letterSpacing: 0.1,
+    textShadowColor: 'rgba(0, 0, 0, 0.1)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 1,
   },
   ios18Fab: {
     display: 'none',

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, Modal, TextInput, FlatList, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, Modal, TextInput, FlatList, Platform, TouchableWithoutFeedback, Keyboard, InteractionManager } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 // FocusViews removed - functionality moved to Focus Zone
@@ -775,23 +775,27 @@ export default function TodoScreen({ focusView = 'all' }: { focusView?: string }
 
 
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY).then((data: string | null) => {
-      if (data) setTasks(JSON.parse(data));
-    });
+    const task = InteractionManager.runAfterInteractions(() => {
+      AsyncStorage.getItem(STORAGE_KEY).then((data: string | null) => {
+        if (data) setTasks(JSON.parse(data));
+      });
 
-    // Load auto archive settings
-    AsyncStorage.getItem(AUTO_ARCHIVE_KEY).then(val => {
-      if (val !== null) setAutoArchive(val === 'true');
-    });
+      // Load auto archive settings
+      AsyncStorage.getItem(AUTO_ARCHIVE_KEY).then(val => {
+        if (val !== null) setAutoArchive(val === 'true');
+      });
 
-    AsyncStorage.getItem(ARCHIVE_DAYS_KEY).then(val => {
-      if (val !== null) {
-        const days = parseInt(val, 10);
-        if (days >= 1) {
-          setArchiveDays(days);
+      AsyncStorage.getItem(ARCHIVE_DAYS_KEY).then(val => {
+        if (val !== null) {
+          const days = parseInt(val, 10);
+          if (days >= 1) {
+            setArchiveDays(days);
+          }
         }
-      }
+      });
     });
+    
+    return () => task.cancel();
   }, []);
 
   useEffect(() => {
