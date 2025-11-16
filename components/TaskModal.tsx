@@ -11,16 +11,20 @@ import {
   Dimensions,
   ScrollView,
   Alert,
-  SafeAreaView,
   Animated,
   Keyboard,
   Easing,
   findNodeHandle,
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "../ThemeContext";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { Subtask, SubtaskManager } from "./SubtaskIndicator";
+
+// Type alias for Animated.View to help TypeScript
+const AnimatedView = Animated.View;
 
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
@@ -110,6 +114,9 @@ const REMINDER_OPTIONS = [
   { key: "1day", label: "1 day before", icon: "calendar-outline", color: "#af52de" },
 ];
 
+export type Priority = "None" | "Low" | "Medium" | "High";
+export type Theme = "light" | "dark";
+
 interface TaskModalProps {
   visible: boolean;
   onClose: () => void;
@@ -124,14 +131,28 @@ export interface TaskData {
   id?: string;
   text: string;
   notes: string;
-  priority: "None" | "Low" | "Medium" | "High";
+  priority: Priority;
   dueDate: string | null;
   reminder: string;
   completed: boolean;
+  subtasks?: Subtask[];
+}
+
+interface PillProps {
+  title: string;
+  value: string;
+  onPress: () => void;
+  icon: string;
+  isDark: boolean;
+  showDot?: boolean;
+  dotColor?: string;
+  pillStyle?: object;
+  valueStyle?: object;
+  iconColor?: string;
 }
 
 // Clean Pill Component
-const Pill = React.forwardRef<any, any>((props, ref) => {
+const Pill = React.forwardRef<View, PillProps>((props, ref) => {
   const { title, value, onPress, icon, isDark, showDot = false, dotColor = undefined, pillStyle = {}, valueStyle = {}, iconColor } = props;
   return (
     <TouchableOpacity
@@ -147,7 +168,7 @@ const Pill = React.forwardRef<any, any>((props, ref) => {
       <View style={styles.pillLeft}>
         <Ionicons name={icon as any} size={20} color={iconColor ?? (isDark ? "#8e8e93" : "#6b7280")} />
         <Text style={[styles.pillTitle, { color: isDark ? "#ffffff" : "#000000" }]}>
-          {title}
+          {title || ''}
         </Text>
       </View>
       <View style={styles.pillRight}>
@@ -174,7 +195,7 @@ const Pill = React.forwardRef<any, any>((props, ref) => {
           </View>
         )}
         <Text style={[styles.pillValue, { color: isDark ? "#8e8e93" : "#6b7280" }, valueStyle]}>
-          {value}
+          {value || ''}
         </Text>
         <Ionicons name="chevron-down" size={16} color={isDark ? "#8e8e93" : "#6b7280"} />
       </View>
@@ -208,18 +229,20 @@ const Dropdown = ({
   useLayoutEffect(() => {
     if (visible && dropdownAnchorRef?.current && parentRef?.current && dropdownAnchorRef.current.measureLayout) {
       setTimeout(() => {
-        dropdownAnchorRef.current.measureLayout(
-          parentRef.current,
-          (x: number, y: number, pillWidth: number, height: number) => {
-            const dropdownWidth = 180;
-            setPosition({
-              top: y + height + 40, // increase offset to lower the dropdown
-              left: x + (pillWidth - dropdownWidth),
-              width: dropdownWidth,
-            });
-          },
-          () => { }
-        );
+        if (dropdownAnchorRef.current && parentRef.current) {
+          dropdownAnchorRef.current.measureLayout(
+            parentRef.current,
+            (x: number, y: number, pillWidth: number, height: number) => {
+              const dropdownWidth = 180;
+              setPosition({
+                top: y + height + 40, // increase offset to lower the dropdown
+                left: x + (pillWidth - dropdownWidth),
+                width: dropdownWidth,
+              });
+            },
+            () => { }
+          );
+        }
       }, 10); // Small delay to ensure layout is complete
     }
   }, [visible, dropdownAnchorRef, parentRef]);
@@ -265,6 +288,7 @@ const Dropdown = ({
     }
   }, [visible]);
 
+  // Move early return AFTER all hooks (React 19 requirement)
   if (!visible) return null;
 
   // Check if this is the Priority dropdown
@@ -349,7 +373,7 @@ const Dropdown = ({
                   ...(isDueDateDropdown || isRemindersDropdown ? { marginLeft: 0 } : {}),
                 }
               ]}>
-                {option.label}
+                {option.label || ''}
               </Text>
             </TouchableOpacity>
           );
@@ -562,7 +586,15 @@ const generateSmartSubtasks = (taskText: string): SmartSubtaskSuggestion[] => {
       if (clean.length > 0) clean = clean.charAt(0).toUpperCase() + clean.slice(1);
       return { value: clean, segment: s.segment };
     })
-    .filter((s, i, arr) => s.value.length > 2 && s.value.length < 50 && arr.findIndex(x => x.value.toLowerCase() === s.value.toLowerCase()) === i && !['and', 'or', 'then', 'next', 'after'].includes(s.value.toLowerCase()));
+    .filter((s, i, arr) => {
+      // Check basic length and content requirements
+      if (s.value.length <= 2 || s.value.length >= 50) return false;
+      if (['and', 'or', 'then', 'next', 'after'].indexOf(s.value.toLowerCase()) !== -1) return false;
+      
+      // Check for duplicates using indexOf instead of findIndex
+      const firstIndex = arr.map(x => x.value.toLowerCase()).indexOf(s.value.toLowerCase());
+      return firstIndex === i;
+    });
   // 5. Only suggest if more than one actionable subtask
   if (all.length < 2) return [];
   // 6. Prioritize explicit subtasks, then segment-based, limit to 7
@@ -602,7 +634,18 @@ const SmartSuggestionItem = ({
       }
     ]}
     onPress={() => onApply(suggestion)}
-    activeOpacity={0.85}
+    onPressIn={() => {
+      Keyboard.dismiss();
+    }}
+    onLongPress={() => {
+      Keyboard.dismiss();
+      onApply(suggestion);
+    }}
+    activeOpacity={0.7}
+    delayPressIn={0}
+    delayPressOut={0}
+    delayLongPress={200}
+    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
   >
     <View style={[
       styles.suggestionIconApple,
@@ -614,14 +657,14 @@ const SmartSuggestionItem = ({
       styles.suggestionTextApple,
       { color: isDark ? '#fff' : '#222' }
     ]}>
-      {suggestion.value}
+      {suggestion.value || ''}
     </Text>
     <Ionicons name="add" size={20} color={suggestion.color} style={{ marginLeft: 6 }} />
   </TouchableOpacity>
 );
 
 // Helper for case-insensitive deduplication
-const normalize = (s: string) => s.trim().toLowerCase();
+const normalize = (s: string | undefined | null) => (s || '').trim().toLowerCase();
 
 // Add this function above TaskModal
 function detectPriorityAndDueDate(text: string): { priority: TaskData["priority"], dueDate: string | null } {
@@ -674,39 +717,29 @@ export default function TaskModal({
   maxHeight,
   children,
 }: TaskModalProps) {
-  // Safety check for required props
-  if (typeof visible !== "boolean") {
-    console.warn("[TaskModal] Invalid visible prop:", visible);
-    return null;
-  }
-
-  if (typeof onClose !== "function") {
-    console.warn("[TaskModal] Invalid onClose prop:", onClose);
-    return null;
-  }
-
+  // Move all hooks BEFORE any conditional returns (React 19 requirement)
   const { theme } = useTheme();
-  const colors = APPLE_COLORS[theme];
+  const colors = APPLE_COLORS[theme as keyof typeof APPLE_COLORS];
   const isDark = theme === "dark";
 
   // Create animated value for keyboard height
   const keyboardHeight = useRef(new Animated.Value(0)).current;
   const contentOpacity = useRef(new Animated.Value(1)).current;
 
-  // Form state
-  const [taskText, setTaskText] = useState(editingTask?.text || "");
-  const [notes, setNotes] = useState(editingTask?.notes || "");
+  // Form state with safety validation
+  const [taskText, setTaskText] = useState(typeof editingTask?.text === 'string' ? editingTask.text : "");
+  const [notes, setNotes] = useState(typeof editingTask?.notes === 'string' ? editingTask.notes : "");
   const [priority, setPriority] = useState<TaskData["priority"]>(
     editingTask?.priority || "None"
   );
   const [dueDate, setDueDate] = useState<string | null>(
-    editingTask?.dueDate || null
+    typeof editingTask?.dueDate === 'string' ? editingTask.dueDate : null
   );
   const [reminder, setReminder] = useState(editingTask?.reminder || "none");
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [customDate, setCustomDate] = useState(new Date());
   const [smartSuggestions, setSmartSuggestions] = useState<SmartSuggestion[]>([]);
-  const [subtasks, setSubtasks] = useState<string[]>([]);
+  const [subtasks, setSubtasks] = useState<Subtask[]>(editingTask?.subtasks || []);
   const [smartSubtaskSuggestions, setSmartSubtaskSuggestions] = useState<SmartSubtaskSuggestion[]>([]);
 
   // Dropdown states
@@ -756,10 +789,10 @@ export default function TaskModal({
     const keyboardWillHide = Keyboard.addListener(
       'keyboardWillHide', 
       () => {
-        // Return to original position
+        // Return to original position with smooth animation
         Animated.timing(keyboardHeight, {
           toValue: 0,
-          duration: 250, // Consistent duration
+          duration: 300, // Slightly longer for smoother hide
           useNativeDriver: false,
         }).start();
       }
@@ -779,6 +812,7 @@ export default function TaskModal({
       setPriority(editingTask.priority);
       setDueDate(editingTask.dueDate);
       setReminder(editingTask.reminder);
+      setSubtasks(editingTask.subtasks || []);
     } else if (!visible) {
       // Reset fields when modal closes for new task
       setTaskText("");
@@ -786,6 +820,7 @@ export default function TaskModal({
       setPriority("None");
       setDueDate(null);
       setReminder("none");
+      setSubtasks([]);
       setSmartSuggestions([]); // Reset smart suggestions
       setSmartSubtaskSuggestions([]); // Reset smart subtask suggestions
     }
@@ -900,6 +935,7 @@ export default function TaskModal({
       dueDate,
       reminder,
       completed: editingTask?.completed || false,
+      subtasks: subtasks,
     };
 
     onSave?.(taskData);
@@ -912,24 +948,45 @@ export default function TaskModal({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     // Only handle subtask suggestions now
-    if (!subtasks.some(s => normalize(s) === normalize(suggestion.value))) {
-      setSubtasks([...subtasks, suggestion.value]);
+    const newSubtask: Subtask = {
+      id: Date.now().toString(),
+      text: suggestion.value,
+      completed: false,
+      createdAt: Date.now(),
+    };
+    
+    if (!subtasks.some(s => normalize(s.text) === normalize(suggestion.value))) {
+      setSubtasks([...subtasks, newSubtask]);
     }
 
     // Remove the applied suggestion from the list
     setSmartSuggestions(prev => prev.filter(s => s !== suggestion));
-    // Re-focus the task input to keep the keyboard open
-    taskInputRef.current?.focus();
+    
+    // Keep focus on input with smooth transition
+    setTimeout(() => {
+      taskInputRef.current?.focus();
+    }, 100);
   };
 
-  const handleSmartSubtaskSuggestion = (subtask: string) => {
+  const handleSmartSubtaskSuggestion = (subtaskValue: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (!subtasks.some(s => normalize(s) === normalize(subtask))) {
-      setSubtasks([...subtasks, subtask]);
+    
+    const newSubtask: Subtask = {
+      id: Date.now().toString(),
+      text: subtaskValue,
+      completed: false,
+      createdAt: Date.now(),
+    };
+    
+    if (!subtasks.some(s => normalize(s.text) === normalize(subtaskValue))) {
+      setSubtasks([...subtasks, newSubtask]);
     }
-    setSmartSubtaskSuggestions(prev => prev.filter(s => s.value !== subtask));
-    // Re-focus the task input to keep the keyboard open
-    taskInputRef.current?.focus();
+    setSmartSubtaskSuggestions(prev => prev.filter(s => s.value !== subtaskValue));
+    
+    // Keep focus on input with smooth transition
+    setTimeout(() => {
+      taskInputRef.current?.focus();
+    }, 100);
   };
 
   const getSelectedDueDateLabel = () => {
@@ -1009,6 +1066,22 @@ export default function TaskModal({
     }
   };
 
+  // Safety checks AFTER all hooks (React 19 requirement)
+  if (typeof visible !== "boolean") {
+    console.warn("[TaskModal] Invalid visible prop:", visible);
+    return null;
+  }
+
+  if (typeof onClose !== "function") {
+    console.warn("[TaskModal] Invalid onClose prop:", onClose);
+    return null;
+  }
+
+  // Early return if modal is not visible to prevent unnecessary renders
+  if (!visible) {
+    return null;
+  }
+
   return (
     <Modal
       visible={visible}
@@ -1021,6 +1094,8 @@ export default function TaskModal({
         <Animated.View style={[styles.overlay, { paddingBottom: keyboardHeight }]}>
           <TouchableWithoutFeedback onPress={(e: any) => e.stopPropagation()}>
             <Animated.View style={[styles.bottomSheet, animatedStyle, { backgroundColor: isDark ? "#1c1c1e" : "#ffffff" }]}>
+              {/* Wrap everything in a safer container */}
+              <View style={{ flex: 1 }}>
           <SafeAreaView style={[styles.headerSafeArea, { backgroundColor: isDark ? "#1c1c1e" : "#ffffff" }]}>
             <View style={styles.header}>
               <TouchableOpacity
@@ -1031,7 +1106,7 @@ export default function TaskModal({
                 <Ionicons name="close" size={24} color={isDark ? "#ffffff" : "#000000"} />
               </TouchableOpacity>
               <Text style={[styles.headerTitle, { color: isDark ? "#ffffff" : "#000000" }]}>
-                {editingTask ? "Edit Task" : "New"}
+                {editingTask ? "Edit Task" : title}
               </Text>
               <TouchableOpacity
                 style={styles.checkmarkButton}
@@ -1053,7 +1128,7 @@ export default function TaskModal({
               }
             }}>
               <View ref={modalContentRef} style={{ flex: 1 }}>
-              {children !== undefined && children !== null ? (
+              {false && children !== undefined && children !== null ? (
                 <View style={styles.childrenContainer}>
                   {renderChildrenSafely()}
                 </View>
@@ -1082,11 +1157,6 @@ export default function TaskModal({
                       shadowOpacity: 0.12,
                       shadowRadius: 8,
                       elevation: 4,
-                      transform: [
-                        { scale: taskInputFocusScale },
-                        { translateY: taskInputFocusTranslateY }
-                      ],
-                      opacity: taskInputFocusOpacity,
                     },
                   ]}>
                     <TouchableWithoutFeedback onPress={() => {}}>
@@ -1153,42 +1223,9 @@ export default function TaskModal({
                         if (scrollViewRef.current) {
                           scrollViewRef.current.scrollTo({ y: 0, animated: true });
                         }
-                        Animated.parallel([
-                          Animated.spring(taskInputFocusScale, {
-                            toValue: 0.95,
-                            friction: 5,
-                            useNativeDriver: true,
-                          }),
-                          Animated.spring(taskInputFocusOpacity, {
-                            toValue: 0.8,
-                            friction: 5,
-                            useNativeDriver: true,
-                          }),
-                          Animated.spring(taskInputFocusTranslateY, {
-                            toValue: -10,
-                            friction: 5,
-                            useNativeDriver: true,
-                          }),
-                        ]).start();
                       }}
                       onBlur={() => {
-                        Animated.parallel([
-                          Animated.spring(taskInputFocusScale, {
-                            toValue: 1,
-                            friction: 5,
-                            useNativeDriver: true,
-                          }),
-                          Animated.spring(taskInputFocusOpacity, {
-                            toValue: 1,
-                            friction: 5,
-                            useNativeDriver: true,
-                          }),
-                          Animated.spring(taskInputFocusTranslateY, {
-                            toValue: 0,
-                            friction: 5,
-                            useNativeDriver: true,
-                          }),
-                        ]).start();
+                        // No animation needed
                       }}
                     />
                       </View>
@@ -1211,11 +1248,20 @@ export default function TaskModal({
                           { paddingLeft: 0, paddingRight: 0, marginLeft: 0, marginRight: 0 }
                         ]}
                         keyboardShouldPersistTaps="always"
+                        keyboardDismissMode="none"
+                        scrollEventThrottle={16}
+                        decelerationRate="fast"
+                        bounces={false}
+                        overScrollMode="never"
                       >
                         {smartSuggestions
                           .filter(suggestion => {
+                            // Add safety check for valid suggestion object
+                            if (!suggestion || typeof suggestion.value !== 'string') {
+                              return false;
+                            }
                             const val = normalize(suggestion.value);
-                            return !subtasks.some(s => normalize(s) === val) &&
+                            return !subtasks.some(s => normalize(s.text) === val) &&
                               !smartSubtaskSuggestions.some(s => normalize(s.value) === val);
                           })
                           .map((suggestion, index) => (
@@ -1232,86 +1278,105 @@ export default function TaskModal({
                   {/* Smart Subtask Suggestions */}
                   {smartSubtaskSuggestions.length > 0 && (
                     <View style={styles.suggestionsContainerApple}>
-                      <Text style={styles.suggestionsTitleApple}>
-                        Suggested Subtasks
-                      </Text>
+                      <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
+                        <Text style={styles.suggestionsTitleApple}>
+                          Suggested Subtasks
+                        </Text>
+                      </TouchableWithoutFeedback>
                       <ScrollView
                         horizontal
                         showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={[styles.suggestionsScrollApple, { paddingLeft: 18, paddingRight: 18 }]}
+                        contentContainerStyle={[styles.suggestionsScrollApple, { paddingLeft: 0, paddingRight: 0 }]}
                         style={{ width: '100%' }}
                         keyboardShouldPersistTaps="always"
+                        keyboardDismissMode="none"
+                        scrollEventThrottle={16}
+                        decelerationRate="fast"
+                        bounces={false}
+                        overScrollMode="never"
                       >
                         {smartSubtaskSuggestions
                           .filter(subtask => {
+                            // Add safety check for valid subtask object
+                            if (!subtask || typeof subtask.value !== 'string') {
+                              return false;
+                            }
                             const val = normalize(subtask.value);
-                            return !subtasks.some(s => normalize(s) === val) &&
+                            return !subtasks.some(s => normalize(s.text) === val) &&
                               !smartSuggestions.some(s => normalize(s.value) === val);
                           })
-                          .map((subtask, index) => (
+                          .map((subtask, index, array) => (
                             <TouchableOpacity
                               key={index}
                               style={[
                                 styles.suggestionItemApple,
-                                { backgroundColor: isDark ? '#23243a' : '#f7faff' }
+                                { 
+                                  backgroundColor: isDark ? '#23243a' : '#f7faff',
+                                  marginLeft: index === 0 ? 18 : 0,
+                                  marginRight: index === array.length - 1 ? 18 : 16,
+                                }
                               ]}
-                              onPress={() => handleSmartSubtaskSuggestion(subtask.value)}
-                              activeOpacity={0.85}
+                              onPress={() => {
+                                try {
+                                  if (subtask && subtask.value) {
+                                    handleSmartSubtaskSuggestion(subtask.value);
+                                  }
+                                } catch (error) {
+                                  console.warn('Error handling subtask suggestion:', error);
+                                }
+                              }}
+                              onPressIn={() => {
+                                try {
+                                  Keyboard.dismiss();
+                                } catch (error) {
+                                  console.warn('Error dismissing keyboard:', error);
+                                }
+                              }}
+                              onLongPress={() => {
+                                try {
+                                  Keyboard.dismiss();
+                                  if (subtask && subtask.value) {
+                                    handleSmartSubtaskSuggestion(subtask.value);
+                                  }
+                                } catch (error) {
+                                  console.warn('Error handling long press:', error);
+                                }
+                              }}
+                              activeOpacity={0.7}
+                              delayPressIn={50}
+                              delayPressOut={50}
+                              delayLongPress={300}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                              disabled={!subtask || !subtask.value}
                             >
-                              <View style={[styles.suggestionIconApple, { backgroundColor: subtask.color }]}>
-                                <Ionicons name={subtask.icon as any} size={16} color="#fff" />
-                              </View>
-                              <Text style={[
-                                styles.suggestionTextApple,
-                                { color: isDark ? '#ffffff' : '#000000' }
-                              ]}>
-                                {subtask.value}
-                              </Text>
-                              <Ionicons name="add" size={20} color={subtask.color} style={{ marginLeft: 5 }} />
+                              {subtask && (
+                                <>
+                                  <View style={[styles.suggestionIconApple, { backgroundColor: subtask.color || '#007AFF' }]}>
+                                    <Ionicons name={(subtask.icon as any) || 'add'} size={16} color="#fff" />
+                                  </View>
+                                  <Text style={[
+                                    styles.suggestionTextApple,
+                                    { color: isDark ? '#ffffff' : '#000000' }
+                                  ]}>
+                                    {subtask.value || ''}
+                                  </Text>
+                                  <Ionicons name="add" size={20} color={subtask.color || '#007AFF'} style={{ marginLeft: 5 }} />
+                                </>
+                              )}
                             </TouchableOpacity>
                           ))}
                       </ScrollView>
                     </View>
                   )}
-                  {/* Subtasks Display */}
-                  {subtasks.length > 0 && (
-                    <View style={styles.subtasksContainer}>
-                      <Text style={[
-                        styles.subtasksTitle,
-                        { color: isDark ? '#8e8e93' : '#6b7280' }
-                      ]}>
-                        Subtasks
-                      </Text>
-                      <ScrollView
-                        style={{ maxHeight: 120 }}
-                        keyboardShouldPersistTaps="always"
-                        showsVerticalScrollIndicator={false}
-                      >
-                        {subtasks.map((subtask, index) => (
-                          <View key={index} style={[
-                            styles.subtaskItem,
-                            { backgroundColor: isDark ? '#2c2c2e' : '#f2f2f7' }
-                          ]}>
-                            <Ionicons name="list" size={16} color={isDark ? '#8e8e93' : '#6b7280'} />
-                            <Text style={[
-                              styles.subtaskText,
-                              { color: isDark ? '#ffffff' : '#000000' }
-                            ]}>
-                              {subtask}
-                            </Text>
-                            <TouchableOpacity
-                              onPress={() => {
-                                setSubtasks(subtasks.filter((_, i) => i !== index));
-                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                              }}
-                            >
-                              <Ionicons name="close-circle" size={16} color={isDark ? '#8e8e93' : '#6b7280'} />
-                            </TouchableOpacity>
-                          </View>
-                        ))}
-                      </ScrollView>
-                    </View>
-                  )}
+                  
+                  {/* Enhanced Subtask Manager */}
+                  <SubtaskManager
+                    subtasks={subtasks}
+                    onSubtasksChange={setSubtasks}
+                    isDark={isDark}
+                    maxHeight={200}
+                  />
+                  
                   {/* Priority Pill */}
                   <Pill
                     ref={priorityDropdownRef}
@@ -1324,7 +1389,7 @@ export default function TaskModal({
                     icon="flag-outline"
                     isDark={isDark}
                     showDot={true}
-                    dotColor={PRIORITY_COLORS[priority][isDark ? "dark" : "light"].color}
+                    dotColor={PRIORITY_COLORS[priority as keyof typeof PRIORITY_COLORS][isDark ? "dark" : "light"].color}
                     pillStyle={
                       isDark && priority === "None"
                         ? {
@@ -1332,21 +1397,21 @@ export default function TaskModal({
                         }
                         : !isDark && priority !== "None"
                           ? {
-                            shadowColor: PRIORITY_COLORS[priority].light.color,
+                            shadowColor: PRIORITY_COLORS[priority as keyof typeof PRIORITY_COLORS].light.color,
                             shadowOffset: { width: 0, height: 2 },
                             shadowOpacity: 0.1,
                             shadowRadius: 8,
                             elevation: 4,
-                            backgroundColor: PRIORITY_COLORS[priority].light.bg,
-                            borderColor: PRIORITY_COLORS[priority].light.border,
+                            backgroundColor: PRIORITY_COLORS[priority as keyof typeof PRIORITY_COLORS].light.bg,
+                            borderColor: PRIORITY_COLORS[priority as keyof typeof PRIORITY_COLORS].light.border,
                             borderWidth: 1,
                           }
                           : isDark && priority !== "None"
                             ? {
-                              backgroundColor: PRIORITY_COLORS[priority].dark.bg,
-                              borderColor: PRIORITY_COLORS[priority].dark.border,
+                              backgroundColor: PRIORITY_COLORS[priority as keyof typeof PRIORITY_COLORS].dark.bg,
+                              borderColor: PRIORITY_COLORS[priority as keyof typeof PRIORITY_COLORS].dark.border,
                               borderWidth: 1,
-                              shadowColor: PRIORITY_COLORS[priority].dark.color,
+                              shadowColor: PRIORITY_COLORS[priority as keyof typeof PRIORITY_COLORS].dark.color,
                               shadowOffset: { width: 0, height: 2 },
                               shadowOpacity: 0.1,
                               shadowRadius: 8,
@@ -1354,8 +1419,8 @@ export default function TaskModal({
                             }
                             : {}
                     }
-                    valueStyle={{ color: PRIORITY_COLORS[priority][isDark ? "dark" : "light"].color }}
-                    iconColor={PRIORITY_COLORS[priority][isDark ? "dark" : "light"].color}
+                    valueStyle={{ color: PRIORITY_COLORS[priority as keyof typeof PRIORITY_COLORS][isDark ? "dark" : "light"].color }}
+                    iconColor={PRIORITY_COLORS[priority as keyof typeof PRIORITY_COLORS][isDark ? "dark" : "light"].color}
                   />
                   {/* Due Date Pill */}
                   <Pill
@@ -1516,6 +1581,7 @@ export default function TaskModal({
               onChange={handleCustomDateChange}
             />
           ) : null}
+              </View>
             </Animated.View>
           </TouchableWithoutFeedback>
         </Animated.View>
@@ -1618,7 +1684,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     height: 40,
     borderRadius: 20,
-    marginBottom: 40,
+    marginBottom: 16,
     paddingHorizontal: 20,
     paddingVertical: 0,
     borderWidth: 1,
@@ -1816,33 +1882,9 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     marginRight: 14, // more space between text and add button
   },
-  subtasksContainer: {
-    marginTop: 16,
-    paddingHorizontal: 20,
-  },
-  subtasksTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  subtaskItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginBottom: 30,
-    minHeight: 44,
-  },
-  subtaskText: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '500',
-    marginLeft: 8,
-  },
-  // Add new Apple-style styles
+  // New Apple-style styles
   suggestionsContainerApple: {
-    marginBottom: 15,
+    marginBottom: 4,
     paddingVertical: 0,
     backgroundColor: 'transparent',
     width: '100%',
@@ -1853,7 +1895,8 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#8e8e93',
     marginBottom: 6,
-    marginLeft: 18, // Add left margin to title only
+    marginLeft: 0,
+    paddingHorizontal: 18,
     letterSpacing: 0.1,
   },
   suggestionsScrollApple: {

@@ -9,6 +9,7 @@ import { ThemeProvider, useTheme } from './ThemeContext';
 import { StatusBar } from 'expo-status-bar';
 import { View, Text, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 
 
@@ -58,11 +59,13 @@ function ThemedTabs() {
 export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemeProvider>
-        <NavigationContainer>
-          <ThemedTabs />
-        </NavigationContainer>
-      </ThemeProvider>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <NavigationContainer>
+            <ThemedTabs />
+          </NavigationContainer>
+        </ThemeProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }

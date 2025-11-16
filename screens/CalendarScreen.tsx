@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TouchableWithoutFeedback, SafeAreaView, FlatList, Dimensions, Platform, ActivityIndicator, Pressable, InteractionManager} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TouchableWithoutFeedback, FlatList, Dimensions, Platform, ActivityIndicator, Pressable, InteractionManager} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import type { ListRenderItemInfo } from 'react-native';
 import { useTheme } from '../ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -118,8 +119,8 @@ function getFirstDayOfWeek(year: number, month: number): number {
 }
 function formatDate(date: Date): string {
   const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
+  const month = ('0' + (date.getMonth() + 1)).slice(-2);
+  const day = ('0' + date.getDate()).slice(-2);
   return `${year}-${month}-${day}`;
 }
 function isToday(dateStr: string): boolean {
@@ -129,10 +130,14 @@ function isToday(dateStr: string): boolean {
 }
 function getMonthMatrix(year: number, month: number): { date: string; isCurrentMonth: boolean }[] {
   const daysInMonth = getDaysInMonth(year, month);
-  return Array.from({ length: daysInMonth }, (_, i) => ({
-    date: formatDate(new Date(year, month, i + 1)),
-    isCurrentMonth: true
-  }));
+  const days: { date: string; isCurrentMonth: boolean }[] = [];
+  for (let i = 0; i < daysInMonth; i++) {
+    days.push({
+      date: formatDate(new Date(year, month, i + 1)),
+      isCurrentMonth: true
+    });
+  }
+  return days;
 }
 function getPrevMonth(year: number, month: number) {
   return month === 0 ? { year: year - 1, month: 11 } : { year, month: month - 1 };
@@ -198,15 +203,15 @@ const DayCell = memo(({ cell, isTodayDate, dayTasks, handlePress, isHighlighted 
   );
 });
 
-// Memoized MonthGrid component
-const MonthGrid = memo(({ days, firstDayOfWeek, numRows, getTasksForDate, isToday, handleDayPress, highlightedDate, theme, setTaskModalDate, setTaskModalEditingTask, setShowTaskModal }: any) => {
-  const grid: ({ date: string; isCurrentMonth: boolean } | null)[] = Array(numRows * 7).fill(null);
+const MonthGrid = memo(({ days, firstDayOfWeek, numRows, getTasksForDate, isToday, handleDayPress, highlightedDate, theme }: any) => {
+  const grid: ({ date: string; isCurrentMonth: boolean } | null)[] = new Array(numRows * 7).fill(null);
   for (let i = 0; i < days.length; i++) {
     grid[firstDayOfWeek + i] = days[i];
   }
+
   return (
     <View style={styles.monthGridWrap}>
-      {Array.from({ length: numRows }).map((_, rowIdx) => {
+      {Array.from({ length: numRows }).map((_: any, rowIdx: number) => {
         const weekStart = rowIdx * 7;
         const weekEnd = weekStart + 7;
         let firstCurrent = -1, lastCurrent = -1;
@@ -216,6 +221,28 @@ const MonthGrid = memo(({ days, firstDayOfWeek, numRows, getTasksForDate, isToda
             lastCurrent = i - weekStart;
           }
         }
+
+        const weekCells: any[] = [];
+        for (let colIdx = 0; colIdx < 7; colIdx++) {
+          const cell = grid[rowIdx * 7 + colIdx];
+          if (!cell) {
+            weekCells.push(<View key={colIdx} style={styles.dayCellWrap} />);
+          } else {
+            const isTodayDate = isToday(cell.date);
+            const dayTasks = getTasksForDate(cell.date);
+            weekCells.push(
+              <DayCell
+                key={cell.date}
+                cell={cell}
+                isTodayDate={isTodayDate}
+                dayTasks={dayTasks}
+                handlePress={() => handleDayPress(cell.date)}
+                isHighlighted={highlightedDate === cell.date && !isTodayDate}
+              />
+            );
+          }
+        }
+
         return (
           <React.Fragment key={rowIdx}>
             {firstCurrent !== -1 && lastCurrent !== -1 && (
@@ -234,24 +261,7 @@ const MonthGrid = memo(({ days, firstDayOfWeek, numRows, getTasksForDate, isToda
               </View>
             )}
             <View style={{ ...styles.weekRow, height: DAY_CELL_HEIGHT, alignItems: 'center', justifyContent: 'center' }}>
-              {Array.from({ length: 7 }).map((_, colIdx) => {
-                const cell = grid[rowIdx * 7 + colIdx];
-                if (!cell) {
-                  return <View key={colIdx} style={styles.dayCellWrap} />;
-                }
-                const isTodayDate = isToday(cell.date);
-                const dayTasks = getTasksForDate(cell.date);
-                return (
-                  <DayCell
-                    key={cell.date}
-                    cell={cell}
-                    isTodayDate={isTodayDate}
-                    dayTasks={dayTasks}
-                    handlePress={() => handleDayPress(cell.date)}
-                    isHighlighted={highlightedDate === cell.date && !isTodayDate}
-                  />
-                );
-              })}
+              {weekCells}
             </View>
           </React.Fragment>
         );
@@ -321,26 +331,30 @@ export default function CalendarScreen() {
   const MODAL_SCALE_END = 1;
   const MODAL_OPACITY_START = 0;
   const MODAL_OPACITY_END = 1;
-  const MODAL_ANIMATION_DURATION = 260;
-  const MODAL_EASING = Easing.bezier(0.4, 0, 0.2, 1);
-
-  // Animation values for modal (Reanimated)
-  const modalOpacity = useSharedValue(0);
-  const modalScale = useSharedValue(0.8);
-  const modalTranslateY = useSharedValue(MODAL_HEIGHT);
-
+  const MODAL_ANIMATION_DURATION = 300;
+  const MODAL_EASING = Easing.bezier(0.25, 0.1, 0.25, 1);
+  
   // 1. Limit monthsOfYear to ±1 year from today for performance
   const yearRange = 1; // Reduced from 3 to 1 for optimization
   const baseYear = today.getFullYear();
-  const monthsOfYear = useMemo(() => Array.from({ length: (yearRange * 2 + 1) * 12 }, (_, i) => {
-    const year = baseYear - yearRange + Math.floor(i / 12);
-    const month = i % 12;
-    return { year, month };
-  }), [baseYear]);
+  const monthsOfYear = useMemo(() => {
+    const months: { year: number; month: number }[] = [];
+    const totalMonths = (yearRange * 2 + 1) * 12;
+    for (let i = 0; i < totalMonths; i++) {
+      const year = baseYear - yearRange + Math.floor(i / 12);
+      const month = i % 12;
+      months.push({ year, month });
+    }
+    return months;
+  }, [baseYear]);
+  
+  const modalOpacity = useSharedValue(MODAL_OPACITY_START);
+  const modalScale = useSharedValue(MODAL_SCALE_START);
+  const modalTranslateY = useSharedValue(MODAL_HEIGHT);
 
   // Calculate initial index for current month
   const initialIndex = useMemo(() => {
-    return monthsOfYear.findIndex(m => m.year === today.getFullYear() && m.month === today.getMonth());
+    return monthsOfYear.findIndex((m: any) => m.year === today.getFullYear() && m.month === today.getMonth());
   }, [monthsOfYear, today]);
 
   // Set visibleMonth to the correct initial month on mount
@@ -540,7 +554,12 @@ const animateModalOut = useCallback(() => {
           dueDate: item.dueDate || formatDate(today) + 'T00:00:00',
           reminder: 'none',
           completed: item.completed,
-          subtasks: item.subtasks || [],
+          subtasks: item.subtasks?.map(st => ({
+            id: st.id,
+            text: st.text,
+            completed: st.completed,
+            createdAt: Date.now(),
+          })) || [],
           archived: item.archived,
           category: item.category,
         });
@@ -759,7 +778,12 @@ const animateModalOut = useCallback(() => {
             dueDate: task.dueDate || formatDate(today) + 'T00:00:00',
             reminder: 'none',
             completed: task.completed,
-            subtasks: task.subtasks || [],
+            subtasks: task.subtasks?.map(st => ({
+              id: st.id,
+              text: st.text,
+              completed: st.completed,
+              createdAt: Date.now(),
+            })) || [],
             archived: task.archived,
             category: task.category,
           });
@@ -914,6 +938,11 @@ const animateModalOut = useCallback(() => {
             note: task.notes || '',
             priority: task.priority,
             dueDate: task.dueDate || t.dueDate,
+            subtasks: task.subtasks?.map(st => ({
+              id: st.id,
+              text: st.text,
+              completed: st.completed,
+            })) || [],
           }
         : t
     ));
@@ -943,7 +972,11 @@ const animateModalOut = useCallback(() => {
         dueType: 'custom',
         dueDate: task.dueDate || addTaskModalDate || '',
         completed: false,
-        subtasks: [],
+        subtasks: task.subtasks?.map(st => ({
+          id: st.id,
+          text: st.text,
+          completed: st.completed,
+        })) || [],
         archived: false,
       },
       ...prev
@@ -981,7 +1014,6 @@ const animateModalOut = useCallback(() => {
         ) : (
           <>
             {renderWeekdays()}
-            <View/>
             <FlatList
               ref={flatListRef}
               data={monthsOfYear}
@@ -1170,7 +1202,12 @@ const animateModalOut = useCallback(() => {
                         dueDate: item.dueDate || formatDate(today) + 'T00:00:00',
                         reminder: 'none',
                         completed: item.completed,
-                        subtasks: item.subtasks || [],
+                        subtasks: item.subtasks?.map(st => ({
+                          id: st.id,
+                          text: st.text,
+                          completed: st.completed,
+                          createdAt: Date.now(),
+                        })) || [],
                         archived: item.archived,
                         category: item.category,
                       });
@@ -1213,6 +1250,7 @@ const animateModalOut = useCallback(() => {
               />
             </Animated.View>
           </Animated.View>
+        
         {/* TaskModal for editing existing tasks (long press) */}
         <TaskModal
           visible={showTaskModal}

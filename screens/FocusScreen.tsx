@@ -4,7 +4,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   Animated,
   Platform,
   Dimensions,
@@ -12,6 +11,7 @@ import {
   TextInput,
   Alert
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { AnimatedCircularProgress } from 'react-native-circular-progress';
 import * as Haptics from 'expo-haptics';
@@ -51,7 +51,7 @@ const COLORS = {
 const FOCUS_MODES = {
   DEEP_WORK: {
     name: 'Deep Work',
-    icon: 'ios-bulb-outline',
+    icon: 'bulb-outline',
     duration: 90,
     color: COLORS.primary.light,
     description: 'Intensive focus for complex tasks',

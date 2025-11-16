@@ -3,7 +3,8 @@
     "jsx": "react-jsx",
     "strict": true,
     "esModuleInterop": true,
-    "types": ["react-native"]
+    "types": ["react-native"],
+    "lib": ["ES2017"]
   },
   "extends": "expo/tsconfig.base"
 }

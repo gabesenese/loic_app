@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, Modal, TextInput, FlatList, Platform, TouchableWithoutFeedback, Keyboard, InteractionManager } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, FlatList, Platform, TouchableWithoutFeedback, Keyboard, InteractionManager } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 // FocusViews removed - functionality moved to Focus Zone
@@ -8,7 +9,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { FontAwesome5 } from '@expo/vector-icons';
 import Header from '../components/Header';
 import { useTheme } from '../ThemeContext';
-import { BlurView } from 'expo-blur';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, runOnJS, Easing } from 'react-native-reanimated';
 import { Swipeable } from 'react-native-gesture-handler';
 import { SubtaskIndicator } from '../components/SubtaskIndicator';
@@ -91,19 +91,19 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 32,
     right: 32,
-    width: 44,
-    height: 44,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.95)',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.08)',
+    borderColor: 'rgba(255, 255, 255, 0.18)',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    elevation: 12,
   },
   modal: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
   modalBackdrop: { 
@@ -126,16 +126,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalContent: { 
-    backgroundColor: '#fff', 
-    borderRadius: 16, 
+    backgroundColor: 'rgba(255, 255, 255, 0.95)', 
+    borderRadius: 20, 
     padding: 24, 
     width: '100%',
     maxWidth: 400,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
+    shadowOffset: { width: 0, height: 20 },
     shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 10,
+    shadowRadius: 40,
+    elevation: 20,
     marginBottom: 0,
   },
   modalTitle: { 
@@ -144,8 +146,6 @@ const styles = StyleSheet.create({
     marginBottom: 20, 
     textAlign: 'center',
     color: '#1a1a1a',
-    includeFontPadding: false,
-    textAlignVertical: 'center',
   },
   inputContainer: {
     width: '100%',
@@ -154,14 +154,12 @@ const styles = StyleSheet.create({
   },
   input: { 
     borderWidth: 1, 
-    borderColor: '#e1e5e9', 
+    borderColor: 'rgba(225, 229, 233, 0.6)', 
     borderRadius: 12, 
     padding: 16, 
     marginBottom: 24, 
     fontSize: 16,
-    backgroundColor: '#f8f9fa',
-    includeFontPadding: false,
-    textAlignVertical: 'center',
+    backgroundColor: 'rgba(248, 249, 250, 0.8)',
     minHeight: 48,
     maxHeight: 48,
     height: 48,
@@ -177,29 +175,29 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
     borderRadius: 12,
-    backgroundColor: '#f1f3f4',
+    backgroundColor: 'rgba(241, 243, 244, 0.8)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
     alignItems: 'center',
   },
   cancelBtnText: {
     fontSize: 16,
     fontWeight: '500',
     color: '#5f6368',
-    includeFontPadding: false,
-    textAlignVertical: 'center',
   },
   saveBtn: { 
     flex: 1,
     padding: 16, 
-    backgroundColor: '#1a73e8', 
+    backgroundColor: 'rgba(26, 115, 232, 0.9)', 
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
     alignItems: 'center',
   },
   saveBtnText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',
-    includeFontPadding: false,
-    textAlignVertical: 'center',
   },
   taskItem: { 
     flexDirection: 'row', 
@@ -210,7 +208,8 @@ const styles = StyleSheet.create({
     borderRadius: 16, 
     marginBottom: 12, 
     marginHorizontal: 4,
-    backgroundColor: '#fafbfc', 
+    backgroundColor: 'rgba(250, 251, 252, 0.95)', 
+    borderWidth: 1,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -288,16 +287,16 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 0,
     top: 30,
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 8,
+    borderColor: 'rgba(224, 224, 224, 0.6)',
+    borderRadius: 12,
     padding: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 15,
     minWidth: 120,
     zIndex: 100,
   },
@@ -319,21 +318,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     width: 80,
-    backgroundColor: '#ffebee', // Light red background for delete button
-    marginBottom: 8, // Match the task item margin
+    backgroundColor: 'rgba(255, 235, 238, 0.9)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    marginBottom: 8,
   },
   deleteButtonTouchable: {
     justifyContent: 'center',
     alignItems: 'center',
     width: '100%',
     height: '100%',
-    backgroundColor: '#ffebee', // Light red background for touchable area
+    backgroundColor: 'transparent',
   },
   subtaskDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#34c759', // iOS green for subtasks
+    backgroundColor: '#34c759',
     marginLeft: 10,
     marginRight: 0,
     alignSelf: 'center',
@@ -869,21 +870,24 @@ export default function TodoScreen({ focusView = 'all' }: { focusView?: string }
         />
         <TouchableOpacity
           style={[styles.addTaskBtn, {
-            backgroundColor: isDark ? '#fff' : '#111',
-            borderColor: 'transparent',
-            borderWidth: 0,
+            backgroundColor: isDark 
+              ? '#ffffff' 
+              : '#000000',
             borderRadius: 22,
             width: 44,
             height: 44,
             justifyContent: 'center',
             alignItems: 'center',
+            shadowColor: '#000000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.3,
+            shadowRadius: 8,
+            elevation: 6,
           }]}
-          onPress={() => {
-            setShowTaskForm(true);
-          }}
+          onPress={() => setShowTaskForm(true)}
           activeOpacity={0.8}
         >
-          <FontAwesome5 name="plus" size={22} color={isDark ? '#111' : '#fff'} />
+          <FontAwesome5 name="plus" size={20} color={isDark ? '#000000' : '#ffffff'} />
         </TouchableOpacity>
       </View>
       {/* Task Form Modal */}
@@ -904,7 +908,11 @@ export default function TodoScreen({ focusView = 'all' }: { focusView?: string }
               dueType: taskData.dueDate ? 'custom' : 'none',
               dueDate: taskData.dueDate || undefined,
               completed: taskData.completed,
-              subtasks: [],
+              subtasks: taskData.subtasks?.map(st => ({
+                id: st.id,
+                text: st.text,
+                completed: st.completed,
+              })) || [],
               archived: false,
             });
           } else {
@@ -915,7 +923,11 @@ export default function TodoScreen({ focusView = 'all' }: { focusView?: string }
               dueType: taskData.dueDate ? 'custom' : 'none',
               dueDate: taskData.dueDate || undefined,
               completed: false,
-              subtasks: [],
+              subtasks: taskData.subtasks?.map(st => ({
+                id: st.id,
+                text: st.text,
+                completed: st.completed,
+              })) || [],
               archived: false,
             });
           }
@@ -931,6 +943,12 @@ export default function TodoScreen({ focusView = 'all' }: { focusView?: string }
           dueDate: editingTask.dueDate || null,
           reminder: 'none',
           completed: editingTask.completed,
+          subtasks: editingTask.subtasks?.map(st => ({
+            id: st.id,
+            text: st.text,
+            completed: st.completed,
+            createdAt: Date.now(),
+          })) || [],
         } : null}
       />
 

@@ -1,7 +1,7 @@
 {
   "name": "loic-app",
   "version": "1.0.0",
-  "main": "index.ts",
+  "main": "node_modules/expo/AppEntry.js",
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
@@ -9,12 +9,31 @@
     "web": "expo start --web"
   },
   "dependencies": {
-    "expo": "51.0.0",
-    "react": "18.2.0",
-    "react-native": "0.74.0"
+    "@expo/ui": "^0.2.0-beta.7",
+    "@react-native-async-storage/async-storage": "^2.2.0",
+    "@react-native-community/datetimepicker": "8.4.4",
+    "@react-navigation/bottom-tabs": "^7.4.7",
+    "@react-navigation/native": "^7.1.17",
+    "expo": "~54.0.10",
+    "expo-haptics": "~15.0.0",
+    "expo-notifications": "~0.32.12",
+    "expo-status-bar": "^3.0.8",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-circular-progress": "^1.4.1",
+    "react-native-gesture-handler": "~2.28.0",
+    "react-native-reanimated": "^4.1.2",
+    "react-native-safe-area-context": "^5.6.1",
+    "react-native-screens": "~4.16.0",
+    "react-native-svg": "15.12.1",
+    "react-native-worklets": "0.5.1"
   },
   "devDependencies": {
-    "@babel/core": "7.20.0"
+    "@babel/core": "^7.25.0",
+    "@expo/cli": "^54.0.5",
+    "@types/react": "~19.1.10",
+    "@types/react-native": "^0.73.0",
+    "typescript": "~5.9.2"
   },
   "private": true
 }

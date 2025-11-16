@@ -42,3 +42,4 @@ yarn.lock
 
 # Optimizer 
 optimizer_profiles
+.vscode/settings.json
