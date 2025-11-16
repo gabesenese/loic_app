@@ -224,7 +224,16 @@ const Dropdown = ({
   const [position, setPosition] = useState({ top: 0, left: 0, width: 200 });
   const slideAnim = useRef(new Animated.Value(-20)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.95)).current; // Add scale animation
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+
+  // Reset animation values when visibility changes
+  useEffect(() => {
+    if (!visible) {
+      slideAnim.setValue(-20);
+      opacityAnim.setValue(0);
+      scaleAnim.setValue(0.9);
+    }
+  }, [visible]);
 
   useLayoutEffect(() => {
     if (visible && dropdownAnchorRef?.current && parentRef?.current && dropdownAnchorRef.current.measureLayout) {
@@ -250,46 +259,53 @@ const Dropdown = ({
   useEffect(() => {
     if (visible) {
       Animated.parallel([
-        Animated.timing(slideAnim, {
+        Animated.spring(slideAnim, {
           toValue: 0,
-          duration: 180,
+          damping: 20,
+          stiffness: 300,
+          mass: 1,
           useNativeDriver: true,
         }),
-        Animated.timing(opacityAnim, {
+        Animated.spring(opacityAnim, {
           toValue: 1,
-          duration: 180,
+          damping: 20,
+          stiffness: 300,
+          mass: 1,
           useNativeDriver: true,
         }),
         Animated.spring(scaleAnim, {
           toValue: 1,
-          friction: 6,
-          tension: 120,
+          damping: 18,
+          stiffness: 250,
+          mass: 1,
           useNativeDriver: true,
         }),
       ]).start();
     } else {
       Animated.parallel([
-        Animated.timing(slideAnim, {
+        Animated.spring(slideAnim, {
           toValue: -20,
-          duration: 180,
+          damping: 25,
+          stiffness: 350,
+          mass: 0.8,
           useNativeDriver: true,
         }),
         Animated.timing(opacityAnim, {
           toValue: 0,
-          duration: 120,
+          duration: 150,
+          easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
-        Animated.timing(scaleAnim, {
-          toValue: 0.95,
-          duration: 180,
+        Animated.spring(scaleAnim, {
+          toValue: 0.9,
+          damping: 20,
+          stiffness: 300,
+          mass: 0.8,
           useNativeDriver: true,
         }),
       ]).start();
     }
   }, [visible]);
-
-  // Move early return AFTER all hooks (React 19 requirement)
-  if (!visible) return null;
 
   // Check if this is the Priority dropdown
   const isPriorityDropdown = options.length === 4 && options.some(o => o.key === 'High' && o.icon === 'alert-circle-outline');
@@ -297,6 +313,11 @@ const Dropdown = ({
   const isDueDateDropdown = options.length === 5 && options.some(o => o.key === 'custom' && o.icon === 'create-outline');
   // In Dropdown, check if this is the Reminders dropdown
   const isRemindersDropdown = options.length === 5 && options.some(o => o.key === '1day' && o.icon === 'calendar-outline');
+
+  // Don't unmount, just hide with pointer events
+  if (!visible) {
+    return null;
+  }
 
   return (
     <TouchableOpacity
@@ -326,17 +347,18 @@ const Dropdown = ({
               key={option.key}
               style={[
                 styles.dropdownOption,
-                (isDueDateDropdown || isRemindersDropdown) && {
-                  paddingTop: 2,
-                  paddingBottom: 6,
-                  paddingHorizontal: 16,
+                {
+                  paddingVertical: 8,
+                  paddingHorizontal: 12,
                   minHeight: 44,
-                  borderBottomWidth: isLast ? 0 : StyleSheet.hairlineWidth,
-                  borderBottomColor: isDark ? '#232325' : '#e5e5ea',
-                  justifyContent: 'center',
+                  ...(isDueDateDropdown || isRemindersDropdown) && {
+                    borderBottomWidth: isLast ? 0 : StyleSheet.hairlineWidth,
+                    borderBottomColor: isDark ? '#232325' : '#e5e5ea',
+                  },
                 }
               ]}
               onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 onSelect(option.key);
                 onClose();
               }}
@@ -345,23 +367,53 @@ const Dropdown = ({
               {isPriorityDropdown ? (
                 <View
                   style={{
-                    width: 28,
-                    height: 28,
-                    borderRadius: 14,
+                    width: 32,
+                    height: 32,
+                    borderRadius: 16,
                     backgroundColor: PRIORITY_COLORS[option.key as keyof typeof PRIORITY_COLORS][isDark ? "dark" : "light"].bg,
                     justifyContent: 'center',
                     alignItems: 'center',
-                    marginRight: 16,
+                    marginRight: 12,
                   }}
                 >
                   <Ionicons
                     name={option.icon as any}
                     size={18}
                     color={PRIORITY_COLORS[option.key as keyof typeof PRIORITY_COLORS][isDark ? "dark" : "light"].color}
+                    style={{
+                      textShadowColor: PRIORITY_COLORS[option.key as keyof typeof PRIORITY_COLORS][isDark ? "dark" : "light"].color,
+                      textShadowOffset: { width: 0, height: 1 },
+                      textShadowRadius: 3,
+                    }}
                   />
                 </View>
-              ) : (isDueDateDropdown || isRemindersDropdown) ? null : (
-                <Ionicons name={option.icon as any} size={20} color={isDark ? "#8e8e93" : "#6b7280"} style={{ marginRight: 16 }} />
+              ) : (isDueDateDropdown || isRemindersDropdown) ? (
+                <View
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 16,
+                    backgroundColor: isDark 
+                      ? `${option.color}15`
+                      : `${option.color}20`,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    marginRight: 12,
+                  }}
+                >
+                  <Ionicons
+                    name={option.icon as any}
+                    size={18}
+                    color={option.color}
+                    style={{
+                      textShadowColor: option.color,
+                      textShadowOffset: { width: 0, height: 1 },
+                      textShadowRadius: 2,
+                    }}
+                  />
+                </View>
+              ) : (
+                <Ionicons name={option.icon as any} size={20} color={isDark ? "#8e8e93" : "#6b7280"} style={{ marginRight: 12 }} />
               )}
               <Text style={[
                 styles.dropdownOptionText,
@@ -370,7 +422,6 @@ const Dropdown = ({
                   fontWeight: "400",
                   fontSize: 16,
                   letterSpacing: 0.1,
-                  ...(isDueDateDropdown || isRemindersDropdown ? { marginLeft: 0 } : {}),
                 }
               ]}>
                 {option.label || ''}
@@ -755,6 +806,10 @@ export default function TaskModal({
   // Submit button animation
   const checkmarkOpacity = useRef(new Animated.Value(0)).current;
 
+  // Date picker animation
+  const datePickerOpacity = useRef(new Animated.Value(0)).current;
+  const datePickerScale = useRef(new Animated.Value(0.9)).current;
+
   // Input focus animation values (similar to calendar modal)
   const taskInputFocusScale = useRef(new Animated.Value(1)).current;
   const taskInputFocusOpacity = useRef(new Animated.Value(1)).current;
@@ -771,30 +826,33 @@ export default function TaskModal({
   const reminderDropdownRef = useRef<any>(null);
   const modalContentRef = useRef<any>(null);
   const scrollViewRef = useRef<ScrollView>(null);
+  const activeInputRef = useRef<'task' | 'notes' | 'subtask' | null>(null);
 
-  // Keyboard handling - Simple position adjustment without complex animations
+  // Keyboard handling - Smart scrolling to center active input
   useEffect(() => {
     const keyboardWillShow = Keyboard.addListener(
       'keyboardWillShow', 
       (e) => {
-        // Simple, stable adjustment for keyboard
-        Animated.timing(keyboardHeight, {
-          toValue: e.endCoordinates.height * 0.5, // Move up by half keyboard height for better visibility
-          duration: 250, // Shorter, smoother duration
-          useNativeDriver: false,
-        }).start();
+        // Small delay to ensure layout is complete
+        setTimeout(() => {
+          if (scrollViewRef.current && activeInputRef.current) {
+            if (activeInputRef.current === 'notes') {
+              // Scroll to show notes input
+              scrollViewRef.current.scrollToEnd({ animated: true });
+            } else if (activeInputRef.current === 'subtask') {
+              // Scroll to middle for subtask editing
+              scrollViewRef.current.scrollTo({ y: 200, animated: true });
+            }
+            // For 'task', no scroll needed as it's at the top
+          }
+        }, 100);
       }
     );
 
     const keyboardWillHide = Keyboard.addListener(
       'keyboardWillHide', 
       () => {
-        // Return to original position with smooth animation
-        Animated.timing(keyboardHeight, {
-          toValue: 0,
-          duration: 300, // Slightly longer for smoother hide
-          useNativeDriver: false,
-        }).start();
+        activeInputRef.current = null;
       }
     );
 
@@ -870,11 +928,16 @@ export default function TaskModal({
     }
   }, [visible, modalOpacity, modalScale, modalTranslateY]);
 
+  const closeDatePicker = () => {
+    setShowDatePicker(false);
+  };
+
   const handleDueDateSelect = (option: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Keyboard.dismiss();
 
     if (option === "custom") {
+      console.log('Custom date selected, showing date picker');
       setShowDatePicker(true);
       return;
     }
@@ -901,10 +964,22 @@ export default function TaskModal({
   };
 
   const handleCustomDateChange = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(false);
-    if (selectedDate) {
-      setCustomDate(selectedDate);
-      setDueDate(selectedDate.toISOString());
+    try {
+      if (Platform.OS === 'android') {
+        setShowDatePicker(false);
+        return;
+      }
+      
+      if (event.type === 'set' && selectedDate) {
+        setCustomDate(selectedDate);
+        setDueDate(selectedDate.toISOString());
+        setShowDatePicker(false);
+      } else if (event.type === 'dismissed') {
+        setShowDatePicker(false);
+      }
+    } catch (error) {
+      console.error('Error handling date change:', error);
+      setShowDatePicker(false);
     }
   };
 
@@ -982,11 +1057,6 @@ export default function TaskModal({
       setSubtasks([...subtasks, newSubtask]);
     }
     setSmartSubtaskSuggestions(prev => prev.filter(s => s.value !== subtaskValue));
-    
-    // Keep focus on input with smooth transition
-    setTimeout(() => {
-      taskInputRef.current?.focus();
-    }, 100);
   };
 
   const getSelectedDueDateLabel = () => {
@@ -1091,7 +1161,7 @@ export default function TaskModal({
       statusBarTranslucent
     >
       <TouchableWithoutFeedback onPress={onClose}>
-        <Animated.View style={[styles.overlay, { paddingBottom: keyboardHeight }]}>
+        <View style={styles.overlay}>
           <TouchableWithoutFeedback onPress={(e: any) => e.stopPropagation()}>
             <Animated.View style={[styles.bottomSheet, animatedStyle, { backgroundColor: isDark ? "#1c1c1e" : "#ffffff" }]}>
               {/* Wrap everything in a safer container */}
@@ -1099,7 +1169,18 @@ export default function TaskModal({
           <SafeAreaView style={[styles.headerSafeArea, { backgroundColor: isDark ? "#1c1c1e" : "#ffffff" }]}>
             <View style={styles.header}>
               <TouchableOpacity
-                style={[styles.closeButton, { backgroundColor: isDark ? "#2c2c2e" : "#f2f2f7" }]}
+                style={[
+                  styles.closeButton,
+                  {
+                    backgroundColor: isDark
+                      ? 'rgba(255, 255, 255, 0.08)'
+                      : 'rgba(0, 0, 0, 0.09)',
+                    shadowColor: isDark ? '#ffffff' : '#000000',
+                    shadowOpacity: isDark ? 0.15 : 0.6,
+                    borderWidth: isDark ? 0.5 : 0,
+                    borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                  },
+                ]}
                 onPress={onClose}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
@@ -1113,10 +1194,15 @@ export default function TaskModal({
                 onPress={handleSave}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Ionicons name="checkmark" size={24} color="#fff" />
+                <Ionicons name="checkmark" size={24} color="#ff3b30" />
               </TouchableOpacity>
             </View>
           </SafeAreaView>
+          <View style={{
+            height: 1,
+            backgroundColor: isDark ? '#2c2c2e' : '#e5e5ea',
+            width: '100%',
+          }} />
           <Animated.View style={[styles.contentArea, { flex: 1, backgroundColor: isDark ? "#1c1c1e" : "#ffffff" }]}>
             <TouchableWithoutFeedback onPress={() => {
               // Dismiss keyboard when tapping in content area but outside inputs
@@ -1136,12 +1222,13 @@ export default function TaskModal({
                 <ScrollView
                   ref={scrollViewRef}
                   style={[styles.scrollContent, { flex: 1 }]}
-                  contentContainerStyle={{ ...styles.scrollContentContainer, flexGrow: 1, paddingBottom: 20 }}
+                  contentContainerStyle={{ ...styles.scrollContentContainer, paddingBottom: 400 }}
                   keyboardShouldPersistTaps="handled"
                   showsVerticalScrollIndicator={false}
                   scrollEventThrottle={16}
                   bounces={true}
                   overScrollMode="auto"
+                  nestedScrollEnabled={true}
                 >
                   {/* Task Input (keep as pill) */}
                   <Animated.View style={[
@@ -1219,6 +1306,7 @@ export default function TaskModal({
                         notesInputRef.current?.focus();
                       }}
                       onFocus={() => {
+                        activeInputRef.current = 'task';
                         // Scroll to the top for task input
                         if (scrollViewRef.current) {
                           scrollViewRef.current.scrollTo({ y: 0, animated: true });
@@ -1375,6 +1463,9 @@ export default function TaskModal({
                     onSubtasksChange={setSubtasks}
                     isDark={isDark}
                     maxHeight={200}
+                    onSubtaskEditStart={() => {
+                      activeInputRef.current = 'subtask';
+                    }}
                   />
                   
                   {/* Priority Pill */}
@@ -1453,7 +1544,7 @@ export default function TaskModal({
                       notesInputRef.current.focus();
                     }
                   }}>
-                    <Animated.View style={[styles.notesContainer, { backgroundColor: isDark ? "#1c1c1e" : "#ffffff", borderColor: "#535353ff", borderWidth: 0.5, transform: [{ scale: notesInputFocusScale }], opacity: notesInputFocusOpacity }]}>
+                    <View style={[styles.notesContainer, { backgroundColor: isDark ? "#1c1c1e" : "#ffffff", borderColor: "#535353ff", borderWidth: 0.5 }]}>
                       <Ionicons
                         name="document-text-outline"
                         size={20}
@@ -1479,35 +1570,13 @@ export default function TaskModal({
                           autoCorrect={true}
                           autoCapitalize="sentences"
                           onFocus={() => {
-                            // Simple focus animations similar to task input
-                            Animated.parallel([
-                              Animated.spring(notesInputFocusScale, {
-                                toValue: 0.98,
-                                friction: 6,
-                                tension: 120,
-                                useNativeDriver: true,
-                              }),
-                              Animated.spring(notesInputFocusOpacity, {
-                                toValue: 0.85,
-                                friction: 6,
-                                tension: 120,
-                                useNativeDriver: true,
-                              }),
-                          ]).start();
-                      }}
-                      onBlur={() => {
-                        Animated.parallel([
-                          Animated.spring(notesInputFocusScale, {
-                            toValue: 1,
-                            friction: 5,
-                            useNativeDriver: true,
-                          }),
-                          Animated.spring(notesInputFocusOpacity, {
-                            toValue: 1,
-                            friction: 5,
-                            useNativeDriver: true,
-                          }),
-                        ]).start();
+                            activeInputRef.current = 'notes';
+                            // Scroll to bottom to show notes input
+                            setTimeout(() => {
+                              if (scrollViewRef.current) {
+                                scrollViewRef.current.scrollToEnd({ animated: true });
+                              }
+                            }, 100);
                       }}
                     />
                       </View>
@@ -1534,7 +1603,7 @@ export default function TaskModal({
                         <Ionicons name="add-circle" size={28} color={notes.trim() ? "#007AFF" : (isDark ? "#8e8e93" : "#6b7280")} />
                       </TouchableOpacity>
                     </Animated.View>
-                  </Animated.View>
+                  </View>
                   </TouchableWithoutFeedback>
                 </ScrollView>
               )}
@@ -1573,18 +1642,60 @@ export default function TaskModal({
           />
 
           {/* Date Picker */}
-          {showDatePicker ? (
-            <DateTimePicker
-              value={customDate}
-              mode="date"
-              display="default"
-              onChange={handleCustomDateChange}
-            />
-          ) : null}
+          {showDatePicker && (
+            <>
+              <TouchableWithoutFeedback onPress={closeDatePicker}>
+                <View style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  zIndex: 999,
+                }} />
+              </TouchableWithoutFeedback>
+              <View style={{
+                backgroundColor: isDark ? '#1c1c1e' : '#ffffff',
+                borderRadius: 12,
+                marginTop: 12,
+                marginBottom: 8,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.06,
+                shadowRadius: 4,
+                elevation: 2,
+                overflow: 'hidden',
+                zIndex: 1000,
+                borderWidth: 1,
+                borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+                alignItems: 'center',
+              }}>
+                <View style={{
+                  paddingTop: 16,
+                  paddingHorizontal: 12,
+                  paddingBottom: 12,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '100%',
+                }}>
+                  <DateTimePicker
+                    value={customDate}
+                    mode="date"
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={handleCustomDateChange}
+                    minimumDate={new Date()}
+                    maximumDate={new Date(new Date().setMonth(new Date().getMonth() + 6))}
+                    themeVariant={isDark ? 'dark' : 'light'}
+                    accentColor="#007aff"
+                  />
+                </View>
+              </View>
+            </>
+          )}
               </View>
             </Animated.View>
           </TouchableWithoutFeedback>
-        </Animated.View>
+        </View>
       </TouchableWithoutFeedback>
     </Modal>
   );
@@ -1657,15 +1768,15 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#f2f2f7',
+    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.6,
+    shadowRadius: 6,
+    elevation: 8,
   },
   childrenContainer: {
     flex: 1,
@@ -1675,16 +1786,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContentContainer: {
-    padding: 24,
-    paddingTop: 20,
-    paddingBottom: 2,
+    padding: 28,
+    paddingTop: 24,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     height: 40,
     borderRadius: 20,
-    marginBottom: 16,
+    marginBottom: 24,
     paddingHorizontal: 20,
     paddingVertical: 0,
     borderWidth: 1,
@@ -1706,9 +1816,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     borderWidth: 0,
     padding: 0,
-    paddingVertical: 10,
+    margin: 0,
     height: 40,
-    lineHeight: 22,
+    lineHeight: 20,
     includeFontPadding: false,
     textAlignVertical: 'center',
   },
@@ -1791,29 +1901,27 @@ const styles = StyleSheet.create({
   dropdownOption: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 4,
-    paddingHorizontal: 8,
     borderRadius: 12,
     marginBottom: 2,
   },
   dropdownOptionText: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "400",
-    marginLeft: 8,
+    flex: 1,
   },
   checkmarkButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#ff3b30', // iOS system red
+    backgroundColor: '#ff3b3018', // iOS system red with transparency
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
+    shadowColor: '#ff3b30',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.6,
     shadowRadius: 6,
-    elevation: 3,
+    elevation: 8,
   },
   // Add a new style for notesContainer
   notesContainer: {
@@ -1884,20 +1992,20 @@ const styles = StyleSheet.create({
   },
   // New Apple-style styles
   suggestionsContainerApple: {
-    marginBottom: 4,
+    marginBottom: 8,
     paddingVertical: 0,
     backgroundColor: 'transparent',
     width: '100%',
     alignSelf: 'stretch',
   },
   suggestionsTitleApple: {
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '600',
     color: '#8e8e93',
-    marginBottom: 6,
+    marginBottom: 8,
     marginLeft: 0,
     paddingHorizontal: 18,
-    letterSpacing: 0.1,
+    letterSpacing: 0.3,
   },
   suggestionsScrollApple: {
     flexDirection: 'row',
@@ -1909,30 +2017,31 @@ const styles = StyleSheet.create({
   suggestionItemApple: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 18,
-    paddingVertical: 10,
-    paddingHorizontal: 12, // Reduced from 20 to 12
-    marginRight: 16,
+    borderRadius: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginRight: 12,
     marginBottom: 2,
     backgroundColor: '#f2f2f7',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 1,
-    minHeight: 38,
+    shadowColor: '#007aff',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 2,
+    minHeight: 42,
     minWidth: 0,
   },
   suggestionIconApple: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 11,
+    marginRight: 12,
   },
   suggestionTextApple: {
     fontSize: 15,
-    fontWeight: '500',
+    fontWeight: '600',
     letterSpacing: 0.1,
     flexShrink: 1,
     color: '#111',

@@ -238,6 +238,7 @@ export const SubtaskItem: React.FC<SubtaskItemProps> = memo(({
             autoFocus
             placeholder="Enter subtask..."
             placeholderTextColor={isDark ? '#666' : '#999'}
+            keyboardAppearance={isDark ? 'dark' : 'light'}
           />
         ) : (
           <TouchableOpacity 
@@ -273,27 +274,20 @@ export const SubtaskItem: React.FC<SubtaskItemProps> = memo(({
           }}
           style={[
             styles.actionButton,
-            { backgroundColor: isDark ? '#0A84FF' : '#007AFF' },
+            { 
+              backgroundColor: isDark 
+                ? 'rgba(10, 132, 255, 0.15)' 
+                : 'rgba(0, 122, 255, 0.1)',
+              borderWidth: 1,
+              borderColor: isDark ? '#0A84FF' : '#007AFF',
+            },
           ]}
         >
           <Ionicons 
             name={isEditing ? "checkmark" : "pencil"} 
             size={14} 
-            color="white" 
+            color={isDark ? '#0A84FF' : '#007AFF'}
           />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={handleDelete}
-          onPressIn={() => {
-            Keyboard.dismiss();
-          }}
-          style={[
-            styles.actionButton,
-            { backgroundColor: isDark ? '#FF453A' : '#FF3B30' },
-          ]}
-        >
-          <Ionicons name="trash" size={14} color="white" />
         </TouchableOpacity>
       </View>
     </Animated.View>
@@ -305,6 +299,7 @@ interface SubtaskManagerProps {
   onSubtasksChange: (subtasks: Subtask[]) => void;
   isDark?: boolean;
   maxHeight?: number;
+  onSubtaskEditStart?: () => void;
 }
 
 export const SubtaskManager: React.FC<SubtaskManagerProps> = ({
@@ -312,6 +307,7 @@ export const SubtaskManager: React.FC<SubtaskManagerProps> = ({
   onSubtasksChange,
   isDark = false,
   maxHeight = 300,
+  onSubtaskEditStart,
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -375,7 +371,10 @@ export const SubtaskManager: React.FC<SubtaskManagerProps> = ({
             onEdit={handleEditSubtask}
             onDelete={handleDeleteSubtask}
             isEditing={editingId === subtask.id}
-            onStartEdit={() => setEditingId(subtask.id)}
+            onStartEdit={() => {
+              setEditingId(subtask.id);
+              onSubtaskEditStart?.();
+            }}
             onEndEdit={() => setEditingId(null)}
             isDark={isDark}
           />
@@ -389,9 +388,9 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 16,
     paddingHorizontal: 16,
-    marginVertical: 4,
+    marginVertical: 8,
     borderRadius: 12,
     borderWidth: 1,
     shadowColor: '#000',
@@ -415,16 +414,15 @@ const styles = StyleSheet.create({
   contentContainer: {
     flex: 1,
     marginRight: 12,
-    height: 32,
     justifyContent: 'center',
+    paddingVertical: 2,
   },
   subtaskText: {
     fontSize: 16,
     fontWeight: '400',
-    lineHeight: 16,
-    textAlignVertical: 'center',
+    lineHeight: 22,
     includeFontPadding: false,
-    height: 16,
+    paddingTop: 2,
   },
   editInput: {
     fontSize: 16,
@@ -446,24 +444,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   managerContainer: {
-    paddingVertical: 4,
+    paddingVertical: 12,
   },
   progressHeader: {
-    marginBottom: 16,
+    marginBottom: 20,
   },
   progressText: {
     fontSize: 14,
     fontWeight: '600',
-    marginBottom: 8,
+    marginBottom: 10,
+    letterSpacing: 0.2,
   },
   progressBar: {
-    height: 6,
-    borderRadius: 3,
+    height: 8,
+    borderRadius: 4,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 1,
   },
   progressFill: {
     height: '100%',
-    borderRadius: 3,
+    borderRadius: 4,
   },
   subtasksList: {
     marginBottom: 16,

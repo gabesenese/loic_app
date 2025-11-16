@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
   addTaskBtn: {
     position: 'absolute',
     bottom: 32,
-    right: 32,
+    alignSelf: 'center',
     width: 56,
     height: 56,
     borderRadius: 28,
@@ -763,6 +763,7 @@ export default function TodoScreen({ focusView = 'all' }: { focusView?: string }
   const [tasks, setTasks] = useState<Task[]>([]);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [showTaskForm, setShowTaskForm] = useState(false);
+  const buttonScale = useSharedValue(1);
   const [customDueDate, setCustomDueDate] = useState<string | undefined>(undefined);
   const [currentDate, setCurrentDate] = useState(() => {
     const now = new Date();
@@ -771,6 +772,14 @@ export default function TodoScreen({ focusView = 'all' }: { focusView?: string }
   });
   const [autoArchive, setAutoArchive] = useState(true);
   const [archiveDays, setArchiveDays] = useState(7);
+
+  const animatedButtonStyle = useAnimatedStyle(() => {
+    return {
+      transform: [
+        { scale: buttonScale.value },
+      ],
+    };
+  });
 
 
 
@@ -869,25 +878,47 @@ export default function TodoScreen({ focusView = 'all' }: { focusView?: string }
           onDelete={deleteTask}
         />
         <TouchableOpacity
-          style={[styles.addTaskBtn, {
-            backgroundColor: isDark 
-              ? '#ffffff' 
-              : '#000000',
-            borderRadius: 22,
-            width: 44,
-            height: 44,
-            justifyContent: 'center',
-            alignItems: 'center',
-            shadowColor: '#000000',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.3,
-            shadowRadius: 8,
-            elevation: 6,
-          }]}
-          onPress={() => setShowTaskForm(true)}
-          activeOpacity={0.8}
+          onPress={async () => {
+            buttonScale.value = withSpring(0.88, { damping: 15, stiffness: 500 });
+            
+            try {
+              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            } catch (error) {
+              console.log('Haptic feedback not available');
+            }
+            
+            setTimeout(() => {
+              buttonScale.value = withSpring(1, { damping: 15, stiffness: 500 });
+              setShowTaskForm(true);
+            }, 100);
+          }}
+          activeOpacity={1}
         >
-          <FontAwesome5 name="plus" size={20} color={isDark ? '#000000' : '#ffffff'} />
+          <Animated.View
+            style={[styles.addTaskBtn, {
+              position: 'absolute',
+              bottom: 24,
+              left: '50%',
+              marginLeft: -28,
+              backgroundColor: isDark 
+                ? 'rgba(255, 255, 255, 0.08)'
+                : 'rgba(0, 0, 0, 0.09)',
+              borderRadius: 28,
+              width: 56,
+              height: 56,
+              justifyContent: 'center',
+              alignItems: 'center',
+              shadowColor: isDark ? '#ffffff' : '#000000',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: isDark ? 0.15 : 0.6,
+              shadowRadius: 6,
+              elevation: 8,
+              borderWidth: isDark ? 0.5 : 0,
+              borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+            }, animatedButtonStyle]}
+          >
+            <FontAwesome5 name="plus" size={24} color={isDark ? '#ffffff' : '#000000'} />
+          </Animated.View>
         </TouchableOpacity>
       </View>
       {/* Task Form Modal */}
