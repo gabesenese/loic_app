@@ -8,6 +8,21 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { Profiler } from 'react';
 import type { ProfilerOnRenderCallback } from 'react';
+
+// Render blocker: prevents UI from showing until all state effects complete
+function ScreenWrapper({ children }: { children: React.ReactNode }) {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    InteractionManager.runAfterInteractions(() => {
+      setReady(true);
+    });
+  }, []);
+
+  if (!ready) return <View style={{ flex: 1 }} />;
+
+  return <>{children}</>;
+}
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, runOnJS, Easing } from 'react-native-reanimated';
 import { Animated as RNAnimated } from 'react-native';
 import TaskModal, { TaskData } from '../components/TaskModal';
@@ -427,17 +442,18 @@ export default function CalendarScreen() {
   }, []);
 
   useEffect(() => {
-    isMounted.current = true;
-    const task = InteractionManager.runAfterInteractions(() => {
-      AsyncStorage.getItem(STORAGE_KEY).then((data) => {
-        if (isMounted.current && data) setTasks(JSON.parse(data));
-      });
-    });
-    
-    return () => {
-      task.cancel();
-      isMounted.current = false;
-    };
+    let mounted = true;
+    (async () => {
+      try {
+        const data = await AsyncStorage.getItem(STORAGE_KEY);
+        if (!mounted) return;
+        setTasks(data ? JSON.parse(data) : []);
+      } catch (err) {
+        console.warn('Failed to load tasks', err);
+        if (mounted) setTasks([]);
+      }
+    })();
+    return () => { mounted = false; };
   }, []);
   useEffect(() => {
     if (isMounted.current) {
@@ -1006,8 +1022,9 @@ const animateModalOut = useCallback(() => {
   }, [modalVisible, animateModalIn]);
 
   return (
-    <Profiler id="CalendarScreen" onRender={onRenderCallback}>
-      <SafeAreaView style={[styles.container, { backgroundColor: theme === 'dark' ? '#000000' : colors.background, flex: 1 }]}>  
+    <ScreenWrapper>
+      <Profiler id="CalendarScreen" onRender={onRenderCallback}>
+        <SafeAreaView style={[styles.container, { backgroundColor: theme === 'dark' ? '#000000' : colors.background, flex: 1 }]}>
         {renderHeader()}
         {showAgenda ? (
           renderAgendaView()
@@ -1298,8 +1315,9 @@ const animateModalOut = useCallback(() => {
               animationType="slide"
             />
           )} */}
-      </SafeAreaView>
-    </Profiler>
+        </SafeAreaView>
+      </Profiler>
+    </ScreenWrapper>
   );
 }
 

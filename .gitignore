@@ -43,3 +43,5 @@ yarn.lock
 # Optimizer 
 optimizer_profiles
 .vscode/settings.json
+assets/loic_icon_darkmode.png
+.gitignore

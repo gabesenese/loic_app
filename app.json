@@ -4,13 +4,19 @@
     "slug": "loic-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.gabesenese.loicapp",
+      "buildNumber": "1",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIStatusBarStyle": "UIStatusBarStyleDefault",
+        "UIViewControllerBasedStatusBarAppearance": true,
+        "NSCalendarsUsageDescription": "Loïc needs calendar access to sync your focus sessions and tasks",
+        "NSRemindersUsageDescription": "Loïc needs access to send task reminders",
+        "UIBackgroundModes": ["remote-notification"]
       }
     },
     "android": {

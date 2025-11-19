@@ -7,6 +7,21 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { ThemeType } from '../ThemeContext';
 import * as Notifications from 'expo-notifications';
 
+// Render blocker: prevents UI from showing until all state effects complete
+function ScreenWrapper({ children }: { children: React.ReactNode }) {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    InteractionManager.runAfterInteractions(() => {
+      setReady(true);
+    });
+  }, []);
+
+  if (!ready) return <View style={{ flex: 1 }} />;
+
+  return <>{children}</>;
+}
+
 let BlurView: any = null;
 try {
   BlurView = require('expo-blur').BlurView;
@@ -91,25 +106,28 @@ export default function SettingsScreen() {
 
   // Load settings from storage
   useEffect(() => {
-    const task = InteractionManager.runAfterInteractions(() => {
-      AsyncStorage.getItem(NOTIFICATIONS_KEY).then(val => {
-        if (val !== null) setNotificationsEnabled(val === 'true');
-      });
-      AsyncStorage.getItem(AUTO_ARCHIVE_KEY).then(val => {
-        if (val !== null) setAutoArchive(val === 'true');
-      });
-      AsyncStorage.getItem(ARCHIVE_DAYS_KEY).then(val => {
-        if (val !== null) {
-          const days = parseInt(val, 10);
+    let mounted = true;
+    (async () => {
+      try {
+        const notifVal = await AsyncStorage.getItem(NOTIFICATIONS_KEY);
+        if (mounted && notifVal !== null) setNotificationsEnabled(notifVal === 'true');
+        
+        const autoVal = await AsyncStorage.getItem(AUTO_ARCHIVE_KEY);
+        if (mounted && autoVal !== null) setAutoArchive(autoVal === 'true');
+        
+        const daysVal = await AsyncStorage.getItem(ARCHIVE_DAYS_KEY);
+        if (mounted && daysVal !== null) {
+          const days = parseInt(daysVal, 10);
           if (days >= 1) {
             setArchiveDays(days);
             setArchiveDaysInput(days.toString());
           }
         }
-      });
-    });
-    
-    return () => task.cancel();
+      } catch (err) {
+        console.warn('Failed to load settings', err);
+      }
+    })();
+    return () => { mounted = false; };
   }, []);
 
   // Save settings to storage
@@ -172,7 +190,8 @@ export default function SettingsScreen() {
 
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#000000' : '#f2f2f7', paddingTop: top }]}>
+    <ScreenWrapper>
+      <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#000000' : '#f2f2f7', paddingTop: top }]}>
       <View 
         style={styles.scrollContent}
       >
@@ -262,7 +281,8 @@ export default function SettingsScreen() {
           />
         </SettingsSection>
       </View>
-    </SafeAreaView>
+      </SafeAreaView>
+    </ScreenWrapper>
   );
 }
 

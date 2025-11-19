@@ -1,6 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, FlatList, Platform, TouchableWithoutFeedback, Keyboard, InteractionManager } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, FlatList, Platform, TouchableWithoutFeedback, Keyboard, InteractionManager, Animated as RNAnimated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRoute } from '@react-navigation/native';
+
+// Render blocker: prevents UI from showing until all state effects complete
+function ScreenWrapper({ children }: { children: React.ReactNode }) {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    InteractionManager.runAfterInteractions(() => {
+      setReady(true);
+    });
+  }, []);
+
+  if (!ready) return <View style={{ flex: 1 }} />;
+
+  return <>{children}</>;
+}
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 // FocusViews removed - functionality moved to Focus Zone
@@ -120,10 +136,12 @@ const styles = StyleSheet.create({
   },
   modalContainer: { 
     position: 'absolute',
-    bottom: 40,
-    left: 20,
-    right: 20,
+    top: '50%',
+    left: '50%',
+    transform: [{ translateX: '-50%' }, { translateY: '-50%' }],
     alignItems: 'center',
+    width: '100%',
+    paddingHorizontal: 20,
   },
   modalContent: { 
     backgroundColor: 'rgba(255, 255, 255, 0.95)', 
@@ -628,7 +646,7 @@ const AddTaskModal = ({ visible, onClose, onAdd }: { visible: boolean, onClose: 
   const isDark = theme === 'dark';
   const [text, setText] = useState('');
   const inputRef = useRef<TextInput>(null);
-  const modalTranslateY = useSharedValue(0);
+  const modalTranslateY = useRef(new RNAnimated.Value(0)).current;
   
   useEffect(() => {
     if (visible && inputRef.current) {
@@ -639,19 +657,27 @@ const AddTaskModal = ({ visible, onClose, onAdd }: { visible: boolean, onClose: 
     }
   }, [visible]);
 
-  // Simple keyboard handling for TodoScreen modal
+  // Keyboard handling for TodoScreen modal
   useEffect(() => {
     const keyboardWillShow = Keyboard.addListener(
       'keyboardWillShow', 
       (e) => {
-        modalTranslateY.value = withTiming(-e.endCoordinates.height * 0.3, { duration: 250 });
+        RNAnimated.timing(modalTranslateY, {
+          toValue: -e.endCoordinates.height * 0.3,
+          duration: 250,
+          useNativeDriver: false,
+        }).start();
       }
     );
 
     const keyboardWillHide = Keyboard.addListener(
       'keyboardWillHide', 
       () => {
-        modalTranslateY.value = withTiming(0, { duration: 250 });
+        RNAnimated.timing(modalTranslateY, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: false,
+        }).start();
       }
     );
 
@@ -673,7 +699,7 @@ const AddTaskModal = ({ visible, onClose, onAdd }: { visible: boolean, onClose: 
   return (
     <Modal 
       visible={visible} 
-      animationType="slide" 
+      animationType="fade" 
       transparent
       hardwareAccelerated={true}
       statusBarTranslucent={false}
@@ -683,7 +709,7 @@ const AddTaskModal = ({ visible, onClose, onAdd }: { visible: boolean, onClose: 
         <TouchableWithoutFeedback onPress={handleBackdropPress}>
           <View style={styles.modalBackdropTouchable} />
         </TouchableWithoutFeedback>
-        <Animated.View style={[styles.modalContainer, { transform: [{ translateY: modalTranslateY }] }]}>
+        <RNAnimated.View style={[styles.modalContainer, { transform: [{ translateY: modalTranslateY }] }]}>
           <TouchableWithoutFeedback onPress={() => {
             // Dismiss keyboard when tapping in modal content but outside input
             if (inputRef.current) {
@@ -737,7 +763,7 @@ const AddTaskModal = ({ visible, onClose, onAdd }: { visible: boolean, onClose: 
                 </View>
               </View>
             </TouchableWithoutFeedback>
-          </Animated.View>
+          </RNAnimated.View>
         </View>
     </Modal>
   );
@@ -754,7 +780,9 @@ const SettingsModal = ({ visible, onClose }: { visible: boolean, onClose: () => 
   </Modal>
 );
 
-export default function TodoScreen({ focusView = 'all' }: { focusView?: string }) {
+export default function TodoScreen() {
+  const route = useRoute();
+  const focusView = (route.params as any)?.focusView ?? 'all';
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const [addModalVisible, setAddModalVisible] = useState(false);
@@ -785,27 +813,33 @@ export default function TodoScreen({ focusView = 'all' }: { focusView?: string }
 
 
   useEffect(() => {
-    const task = InteractionManager.runAfterInteractions(() => {
-      AsyncStorage.getItem(STORAGE_KEY).then((data: string | null) => {
+    let mounted = true;
+    (async () => {
+      try {
+        const data = await AsyncStorage.getItem(STORAGE_KEY);
+        if (!mounted) return;
         if (data) setTasks(JSON.parse(data));
-      });
-
-      // Load auto archive settings
-      AsyncStorage.getItem(AUTO_ARCHIVE_KEY).then(val => {
-        if (val !== null) setAutoArchive(val === 'true');
-      });
-
-      AsyncStorage.getItem(ARCHIVE_DAYS_KEY).then(val => {
-        if (val !== null) {
-          const days = parseInt(val, 10);
-          if (days >= 1) {
-            setArchiveDays(days);
-          }
+        else setTasks([]);
+        
+        // Load auto archive settings
+        const autoArchiveVal = await AsyncStorage.getItem(AUTO_ARCHIVE_KEY);
+        if (mounted && autoArchiveVal !== null) setAutoArchive(autoArchiveVal === 'true');
+        
+        const archiveDaysVal = await AsyncStorage.getItem(ARCHIVE_DAYS_KEY);
+        if (mounted && archiveDaysVal !== null) {
+          const days = parseInt(archiveDaysVal, 10);
+          if (days >= 1) setArchiveDays(days);
         }
-      });
-    });
-    
-    return () => task.cancel();
+      } catch (err) {
+        console.warn('Failed to load data', err);
+        if (mounted) {
+          setTasks([]);
+          setAutoArchive(true);
+          setArchiveDays(7);
+        }
+      }
+    })();
+    return () => { mounted = false; };
   }, []);
 
   useEffect(() => {
@@ -853,21 +887,28 @@ export default function TodoScreen({ focusView = 'all' }: { focusView?: string }
     focusView.charAt(0).toUpperCase() + focusView.slice(1);
 
   return (
-          <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#000000' : '#f3f4f6' }]}>
-      <View style={styles.mainContent}>
-        <Header
-          currentDate={currentDate}
-          onPrev={() => setCurrentDate(prev => {
-            const d = new Date(prev);
-            d.setDate(d.getDate() - 1);
-            return d;
-          })}
-          onNext={() => setCurrentDate(prev => {
-            const d = new Date(prev);
-            d.setDate(d.getDate() + 1);
-            return d;
-          })}
-        />
+    <ScreenWrapper>
+      <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#000000' : '#f3f4f6' }]} edges={['top', 'left', 'right']}>
+        <View style={styles.mainContent}>
+          <Header
+            currentDate={currentDate}
+            onPrev={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setCurrentDate(prev => {
+                const d = new Date(prev);
+                d.setDate(d.getDate() - 1);
+                return d;
+              });
+            }}
+            onNext={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setCurrentDate(prev => {
+                const d = new Date(prev);
+                d.setDate(d.getDate() + 1);
+                return d;
+              });
+            }}
+          />
         <TaskList
           tasks={filteredTasks}
           onToggle={id => setTasks(prev => prev.map(t => t.id === id ? { ...t, completed: !t.completed } : t))}
@@ -920,78 +961,79 @@ export default function TodoScreen({ focusView = 'all' }: { focusView?: string }
             <FontAwesome5 name="plus" size={24} color={isDark ? '#ffffff' : '#000000'} />
           </Animated.View>
         </TouchableOpacity>
-      </View>
-      {/* Task Form Modal */}
-      <TaskModal
-        visible={!!editingTask || showTaskForm}
-        onClose={() => {
-          setEditingTask(null);
-          setShowTaskForm(false);
-          setCustomDueDate(undefined);
-        }}
-        onSave={(taskData) => {
-          if (taskData.id) {
-            updateTask({
-              id: taskData.id,
-              text: taskData.text,
-              note: taskData.notes,
-              priority: taskData.priority,
-              dueType: taskData.dueDate ? 'custom' : 'none',
-              dueDate: taskData.dueDate || undefined,
-              completed: taskData.completed,
-              subtasks: taskData.subtasks?.map(st => ({
-                id: st.id,
-                text: st.text,
-                completed: st.completed,
-              })) || [],
-              archived: false,
-            });
-          } else {
-            addTask({
-              text: taskData.text,
-              note: taskData.notes,
-              priority: taskData.priority,
-              dueType: taskData.dueDate ? 'custom' : 'none',
-              dueDate: taskData.dueDate || undefined,
-              completed: false,
-              subtasks: taskData.subtasks?.map(st => ({
-                id: st.id,
-                text: st.text,
-                completed: st.completed,
-              })) || [],
-              archived: false,
-            });
-          }
-          setEditingTask(null);
-          setShowTaskForm(false);
-          setCustomDueDate(undefined);
-        }}
-        editingTask={editingTask ? {
-          id: editingTask.id,
-          text: editingTask.text,
-          notes: editingTask.note || '',
-          priority: editingTask.priority,
-          dueDate: editingTask.dueDate || null,
-          reminder: 'none',
-          completed: editingTask.completed,
-          subtasks: editingTask.subtasks?.map(st => ({
-            id: st.id,
-            text: st.text,
-            completed: st.completed,
-            createdAt: Date.now(),
-          })) || [],
-        } : null}
-      />
+        </View>
+        {/* Task Form Modal */}
+        <TaskModal
+          visible={!!editingTask || showTaskForm}
+          onClose={() => {
+            setEditingTask(null);
+            setShowTaskForm(false);
+            setCustomDueDate(undefined);
+          }}
+          onSave={(taskData) => {
+            if (taskData.id) {
+              updateTask({
+                id: taskData.id,
+                text: taskData.text,
+                note: taskData.notes,
+                priority: taskData.priority,
+                dueType: taskData.dueDate ? 'custom' : 'none',
+                dueDate: taskData.dueDate || undefined,
+                completed: taskData.completed,
+                subtasks: taskData.subtasks?.map(st => ({
+                  id: st.id,
+                  text: st.text,
+                  completed: st.completed,
+                })) || [],
+                archived: false,
+              });
+            } else {
+              addTask({
+                text: taskData.text,
+                note: taskData.notes,
+                priority: taskData.priority,
+                dueType: taskData.dueDate ? 'custom' : 'none',
+                dueDate: taskData.dueDate || undefined,
+                completed: false,
+                subtasks: taskData.subtasks?.map(st => ({
+                  id: st.id,
+                  text: st.text,
+                  completed: st.completed,
+                })) || [],
+                archived: false,
+              });
+            }
+            setEditingTask(null);
+            setShowTaskForm(false);
+            setCustomDueDate(undefined);
+          }}
+          editingTask={editingTask ? {
+            id: editingTask.id,
+            text: editingTask.text,
+            notes: editingTask.note || '',
+            priority: editingTask.priority,
+            dueDate: editingTask.dueDate || null,
+            reminder: 'none',
+            completed: editingTask.completed,
+            subtasks: editingTask.subtasks?.map(st => ({
+              id: st.id,
+              text: st.text,
+              completed: st.completed,
+              createdAt: Date.now(),
+            })) || [],
+          } : null}
+        />
 
-      <CalendarPopover
-        visible={calendarVisible}
-        onClose={() => setCalendarVisible(false)}
-        onSelectDate={date => {
-          setCustomDueDate(date);
-          setCalendarVisible(false);
-        }}
-      />
-      <SettingsModal visible={settingsVisible} onClose={() => setSettingsVisible(false)} />
-    </SafeAreaView>
+        <CalendarPopover
+          visible={calendarVisible}
+          onClose={() => setCalendarVisible(false)}
+          onSelectDate={date => {
+            setCustomDueDate(date);
+            setCalendarVisible(false);
+          }}
+        />
+        <SettingsModal visible={settingsVisible} onClose={() => setSettingsVisible(false)} />
+      </SafeAreaView>
+    </ScreenWrapper>
   );
-} 
+}

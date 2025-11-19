@@ -9,14 +9,42 @@ import {
   Dimensions,
   Modal,
   TextInput,
-  Alert
+  Alert,
+  InteractionManager
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { AnimatedCircularProgress } from 'react-native-circular-progress';
 import * as Haptics from 'expo-haptics';
+import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../ThemeContext';
+
+// Render blocker: prevents UI from showing until all state effects complete
+function ScreenWrapper({ children }: { children: React.ReactNode }) {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    InteractionManager.runAfterInteractions(() => {
+      setReady(true);
+    });
+  }, []);
+
+  if (!ready) return <View style={{ flex: 1 }} />;
+
+  return <>{children}</>;
+}
+
+// Configure notification handler
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 
 // Apple-inspired color system with semantic meanings and hierarchy
@@ -49,12 +77,12 @@ const COLORS = {
 };
 
 const FOCUS_MODES = {
-  DEEP_WORK: {
-    name: 'Deep Work',
-    icon: 'bulb-outline',
-    duration: 90,
-    color: COLORS.primary.light,
-    description: 'Intensive focus for complex tasks',
+  QUICK: {
+    name: 'Quick Focus',
+    icon: 'timer-outline',
+    duration: 25,
+    color: COLORS.accent,
+    description: 'Short bursts of concentrated effort',
   },
   FLOW: {
     name: 'Flow State',
@@ -63,12 +91,12 @@ const FOCUS_MODES = {
     color: COLORS.success,
     description: 'Balanced focus for creative work',
   },
-  QUICK: {
-    name: 'Quick Focus',
-    icon: 'timer-outline',
-    duration: 25,
-    color: COLORS.accent,
-    description: 'Short bursts of concentrated effort',
+  DEEP_WORK: {
+    name: 'Deep Work',
+    icon: 'bulb-outline',
+    duration: 90,
+    color: COLORS.primary.light,
+    description: 'Intensive focus for complex tasks',
   },
   CUSTOM: {
     name: 'Custom Mode',
@@ -92,6 +120,37 @@ type FocusSession = {
 
 const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
+// Request notification permissions and send notification
+async function sendCompletionNotification() {
+  try {
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    
+    if (finalStatus !== 'granted') {
+      console.log('Notification permissions not granted');
+      return;
+    }
+
+    // Schedule immediate notification
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: "Focus Session Complete! \u{1F389}",
+        body: "Great work! Time for a well-deserved break.",
+        sound: true,
+        priority: Notifications.AndroidNotificationPriority.HIGH,
+      },
+      trigger: null, // immediate
+    });
+  } catch (error) {
+    console.error('Error sending notification:', error);
+  }
+}
+
 export default function FocusScreen() {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
@@ -110,14 +169,16 @@ export default function FocusScreen() {
       scale: new Animated.Value(0.9)
     },
     buttonColor: new Animated.Value(0), // For button color interpolation
+    timerFocus: new Animated.Value(1), // For timer scale when focusing
+    controlsOpacity: new Animated.Value(1), // For fading controls
   }), []);
 
   // Destructure for cleaner access
-  const { fade: fadeAnim, scale: scaleAnim, modeScales: modeScaleAnims, timer: { opacity: timerOpacity, scale: timerScale }, buttonColor: buttonColorAnim } = animations;
+  const { fade: fadeAnim, scale: scaleAnim, modeScales: modeScaleAnims, timer: { opacity: timerOpacity, scale: timerScale }, buttonColor: buttonColorAnim, timerFocus: timerFocusScale, controlsOpacity } = animations;
 
   // Focus mode state
-  const [selectedMode, setSelectedMode] = useState<keyof typeof FOCUS_MODES>('DEEP_WORK');
-  const [prevMode, setPrevMode] = useState<keyof typeof FOCUS_MODES>('DEEP_WORK');
+  const [selectedMode, setSelectedMode] = useState<keyof typeof FOCUS_MODES>('QUICK');
+  const [prevMode, setPrevMode] = useState<keyof typeof FOCUS_MODES>('QUICK');
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState(0);
@@ -126,8 +187,20 @@ export default function FocusScreen() {
   const [favoriteMode, setFavoriteMode] = useState<keyof typeof FOCUS_MODES | null>(null);
   // Custom duration modal state
   const [showCustomModal, setShowCustomModal] = useState(false);
-  const [customDuration, setCustomDuration] = useState('30');
+  const [customDuration, setCustomDuration] = useState(30);
   const [customModeActualDuration, setCustomModeActualDuration] = useState(30);
+  const [selectedPreset, setSelectedPreset] = useState<number | null>(null);
+  // Double-click tracking for custom mode
+  const lastClickTimeRef = useRef<number>(0);
+
+  // Preset duration options
+  const PRESET_DURATIONS = [15, 30, 45, 60, 90, 120];
+
+  // Initialize animation values on mount to prevent glitches
+  useEffect(() => {
+    timerFocusScale.setValue(1);
+    controlsOpacity.setValue(1);
+  }, []);
 
   // Start a new focus session
   const startFocusSession = useCallback(() => {
@@ -142,6 +215,10 @@ export default function FocusScreen() {
 
     // Show session UI immediately for snappy UX, then animate the timer appearance
     setIsSessionActive(true);
+
+    // Reset focus animation values
+    timerFocusScale.setValue(1.08);
+    controlsOpacity.setValue(0.4);
 
     // Quick, subtle entrance for the timer (no slow spring)
     timerOpacity.setValue(0);
@@ -180,18 +257,25 @@ export default function FocusScreen() {
 
   // Start custom focus session with user-defined duration
   const startCustomSession = useCallback(() => {
-    const duration = parseInt(customDuration);
-    if (isNaN(duration) || duration <= 0 || duration > 300) {
-      Alert.alert('Invalid Duration', 'Please enter a valid duration between 1 and 300 minutes.');
+    // Use selected preset if available, otherwise use slider value
+    const duration = selectedPreset || customDuration;
+    
+    if (duration <= 0 || duration > 120) {
+      Alert.alert('Invalid Duration', 'Please select a duration between 1 and 120 minutes.');
       return;
     }
 
     setCustomModeActualDuration(duration);
     setTimeRemaining(duration * 60); // Convert to seconds
     setShowCustomModal(false);
+    setSelectedPreset(null); // Reset preset selection
 
     // Show session UI immediately for snappy UX, then animate the timer appearance
     setIsSessionActive(true);
+
+    // Reset focus animation values
+    timerFocusScale.setValue(1.08);
+    controlsOpacity.setValue(0.4);
 
     // Quick, subtle entrance for the timer (no slow spring)
     timerOpacity.setValue(0);
@@ -230,12 +314,55 @@ export default function FocusScreen() {
 
   // Pause / resume handler for active session
   const togglePause = useCallback(() => {
-    setIsPaused(p => !p);
+    setIsPaused(p => {
+      const newPausedState = !p;
+      
+      // Animate timer scale and controls opacity based on pause state
+      if (newPausedState) {
+        // Paused - scale down timer, fade in controls
+        Animated.parallel([
+          Animated.spring(timerFocusScale, {
+            toValue: 1,
+            tension: 80,
+            friction: 10,
+            useNativeDriver: true,
+          }),
+          Animated.timing(controlsOpacity, {
+            toValue: 1,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+        ]).start();
+      } else {
+        // Playing - scale up timer, fade out controls
+        Animated.parallel([
+          Animated.spring(timerFocusScale, {
+            toValue: 1.08,
+            tension: 80,
+            friction: 10,
+            useNativeDriver: true,
+          }),
+          Animated.timing(controlsOpacity, {
+            toValue: 0.4,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+        ]).start();
+      }
+      
+      return newPausedState;
+    });
     Haptics.selectionAsync();
-  }, []);
+  }, [timerFocusScale, controlsOpacity]);
 
   // End the current focus session: animate out, mark completed, persist
   const endFocusSession = useCallback(async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
+    // Reset focus animation values
+    timerFocusScale.setValue(1);
+    controlsOpacity.setValue(1);
+    
     // Animate timer out and restore UI
     Animated.parallel([
       Animated.timing(timerOpacity, { toValue: 0, duration: 160, useNativeDriver: true }),
@@ -271,7 +398,8 @@ export default function FocusScreen() {
       setTimeRemaining(t => {
         if (t <= 1) {
           clearInterval(id);
-          // End session when time runs out
+          // End session when time runs out and send notification
+          sendCompletionNotification();
           endFocusSession();
           return 0;
         }
@@ -303,14 +431,13 @@ export default function FocusScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: getAdaptiveBackground() }]}>
+    <ScreenWrapper>
+      <SafeAreaView style={[styles.container, { backgroundColor: getAdaptiveBackground() }]}>
       {/* Frosted glass effect removed as requested */}
-      <Animated.View
+      <View
         style={[
           styles.contentContainer,
           {
-            opacity: fadeAnim,
-            transform: [{ scale: scaleAnim }],
             backgroundColor: isDark ? '#000000' : '#ffffff',
           },
         ]}
@@ -318,7 +445,7 @@ export default function FocusScreen() {
         {!isSessionActive && (
           <View style={styles.header}>
             <Text style={[styles.title, { color: isDark ? COLORS.text.dark : COLORS.text.light }]}>
-              Focus Zone
+              Focus
             </Text>
             <Text style={[styles.subtitle, { color: isDark ? COLORS.text.dark : COLORS.text.lightMuted }]}>
               Choose Your Focus Mode
@@ -329,10 +456,22 @@ export default function FocusScreen() {
         {isSessionActive ? (
           // Active Session UI
           <Animated.View style={[styles.timerPage, { opacity: timerOpacity, transform: [{ scale: timerScale }] }]}>
-            <Text style={[styles.timerMode, { color: isDark ? '#E5E5EA' : '#6B7280', paddingBottom: 20}]} allowFontScaling accessibilityLabel={FOCUS_MODES[selectedMode].name}>
+            <Animated.Text style={[
+              styles.timerMode, 
+              { 
+                color: isDark ? '#F4F5F7' : '#111', 
+                paddingBottom: 20,
+                opacity: controlsOpacity,
+              }
+            ]} allowFontScaling accessibilityLabel={FOCUS_MODES[selectedMode].name}>
               {FOCUS_MODES[selectedMode].name}
-            </Text>
-            <View style={[styles.timerCenter, { padding: 0, borderRadius: 999, backgroundColor: 'transparent' }]}>
+            </Animated.Text>
+            <Animated.View style={{ transform: [{ scale: timerFocusScale }] }}>
+              <TouchableOpacity 
+                onPress={togglePause}
+                activeOpacity={0.8}
+                style={[styles.timerCenter, { padding: 0, borderRadius: 999, backgroundColor: 'transparent' }]}
+              >
               <AnimatedCircularProgress
                 size={280}
                 width={18}
@@ -360,12 +499,14 @@ export default function FocusScreen() {
                   </View>
                 )}
               </AnimatedCircularProgress>
-
-            </View>
-            <View style={styles.timerControls}>
+            </TouchableOpacity>
+            </Animated.View>
+            <Animated.View style={[styles.timerControls, { opacity: controlsOpacity }]}>
               <TouchableOpacity
                 style={[styles.pauseButton, { 
-                  backgroundColor: isDark ? '#F8F9FA' : '#1F2937',
+                  backgroundColor: isDark 
+                    ? 'rgba(255, 255, 255, 0.08)'
+                    : 'rgba(0, 0, 0, 0.09)',
                 }]}
                 onPress={togglePause}
                 activeOpacity={0.9}
@@ -374,18 +515,35 @@ export default function FocusScreen() {
                 <Ionicons 
                   name={isPaused ? 'play' : 'pause'} 
                   size={24} 
-                  color={isDark ? '#1F2937' : '#F8F9FA'}
+                  color={isDark ? '#F8F9FA' : '#1F2937'}
+                  style={{
+                    textShadowColor: isDark ? 'rgba(248, 249, 250, 0.3)' : 'rgba(31, 41, 55, 0.3)',
+                    textShadowOffset: { width: 0, height: 1 },
+                    textShadowRadius: 3,
+                  }}
                 />
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.endButton, { backgroundColor: isDark ? '#FF4757' : '#FF3742' }]}
+                style={[styles.endButton, { 
+                  backgroundColor: isDark 
+                    ? 'rgba(255, 71, 87, 0.12)'
+                    : 'rgba(255, 55, 66, 0.12)',
+                }]}
                 onPress={endFocusSession}
                 activeOpacity={0.9}
                 hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               >
-                <Text style={styles.endButtonText}>End Session</Text>
+                <Text style={[
+                  styles.endButtonText, 
+                  { 
+                    color: isDark ? '#FF4757' : '#FF3742',
+                    textShadowColor: isDark ? 'rgba(255, 71, 87, 0.3)' : 'rgba(255, 55, 66, 0.3)',
+                    textShadowOffset: { width: 0, height: 1 },
+                    textShadowRadius: 3,
+                  }
+                ]}>End Session</Text>
               </TouchableOpacity>
-            </View>
+            </Animated.View>
           </Animated.View>
         ) : (
           // Mode Selection UI
@@ -425,6 +583,19 @@ export default function FocusScreen() {
                     setPrevMode(selectedMode);
                     setSelectedMode(key as keyof typeof FOCUS_MODES);
                     Haptics.selectionAsync();
+                  } else if (key === 'CUSTOM') {
+                    // Double-click detection for CUSTOM mode
+                    const now = Date.now();
+                    const timeSinceLastClick = now - lastClickTimeRef.current;
+                    
+                    if (timeSinceLastClick < 500) {
+                      // Double-click detected
+                      setShowCustomModal(true);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                      lastClickTimeRef.current = 0; // Reset to prevent triple-click
+                    } else {
+                      lastClickTimeRef.current = now;
+                    }
                   }
                 }}
                 onLongPress={() => {
@@ -513,45 +684,157 @@ export default function FocusScreen() {
             </AnimatedTouchable>
           </View>
         )}
-      </Animated.View>
+      </View>
 
       {/* Custom Duration Modal */}
       <Modal
         visible={showCustomModal}
         transparent={true}
         animationType="fade"
-        onRequestClose={() => setShowCustomModal(false)}
+        onRequestClose={() => {
+          setShowCustomModal(false);
+          setSelectedPreset(null);
+        }}
       >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }]}>
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => {
+            setShowCustomModal(false);
+            setSelectedPreset(null);
+          }}
+        >
+          <TouchableOpacity 
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={[styles.modalContent, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }]}>
             <Text style={[styles.modalTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-              Custom Focus Duration
+              Custom Duration
             </Text>
             <Text style={[styles.modalSubtitle, { color: isDark ? '#8E8E93' : '#6B7280' }]}>
-              Enter duration in minutes (1-300)
+              Use +/- buttons or quick presets
             </Text>
-            <TextInput
-              style={[
-                styles.modalInput,
-                {
-                  backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
-                  color: isDark ? '#FFFFFF' : '#000000',
-                  borderColor: isDark ? '#3A3A3C' : '#C7C7CC',
-                }
-              ]}
-              value={customDuration}
-              onChangeText={setCustomDuration}
-              placeholder="30"
-              placeholderTextColor={isDark ? '#8E8E93' : '#8E8E93'}
-              keyboardType="number-pad"
-              keyboardAppearance={isDark ? 'dark' : 'light'}
-              maxLength={3}
-              autoFocus={true}
-            />
+            
+            {/* Duration Display with Stepper */}
+            <View style={styles.stepperContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.stepperButton,
+                  {
+                    backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
+                    opacity: customDuration <= 1 ? 0.3 : 1,
+                  }
+                ]}
+                onPress={() => {
+                  if (customDuration > 1) {
+                    setCustomDuration(Math.max(1, customDuration - 1));
+                    setSelectedPreset(null);
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }
+                }}
+                disabled={customDuration <= 1}
+              >
+                <Ionicons 
+                  name="remove" 
+                  size={28} 
+                  color={customDuration <= 1 ? (isDark ? '#4A4A4A' : '#C7C7CC') : COLORS.primary.light}
+                  style={{
+                    textShadowColor: customDuration <= 1 ? 'transparent' : `${COLORS.primary.light}40`,
+                    textShadowOffset: { width: 0, height: 2 },
+                    textShadowRadius: 4,
+                  }}
+                />
+              </TouchableOpacity>
+
+              <View style={styles.stepperValueContainer}>
+                <Text style={[styles.stepperValue, { color: COLORS.primary.light }]}>
+                  {Math.round(customDuration)}
+                </Text>
+                <Text style={[styles.stepperValueLabel, { color: isDark ? '#8E8E93' : '#6B7280' }]}>
+                  minutes
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.stepperButton,
+                  {
+                    backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
+                    opacity: customDuration >= 120 ? 0.3 : 1,
+                  }
+                ]}
+                onPress={() => {
+                  if (customDuration < 120) {
+                    setCustomDuration(Math.min(120, customDuration + 1));
+                    setSelectedPreset(null);
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }
+                }}
+                disabled={customDuration >= 120}
+              >
+                <Ionicons 
+                  name="add" 
+                  size={28} 
+                  color={customDuration >= 120 ? (isDark ? '#4A4A4A' : '#C7C7CC') : COLORS.primary.light}
+                  style={{
+                    textShadowColor: customDuration >= 120 ? 'transparent' : `${COLORS.primary.light}40`,
+                    textShadowOffset: { width: 0, height: 2 },
+                    textShadowRadius: 4,
+                  }}
+                />
+              </TouchableOpacity>
+            </View>
+
+            {/* Quick Preset Buttons */}
+            <View style={styles.quickPresetsContainer}>
+              <Text style={[styles.quickPresetsLabel, { color: isDark ? '#8E8E93' : '#6B7280' }]}>
+                Or select preset:
+              </Text>
+              <View style={styles.quickPresetsButtons}>
+                {PRESET_DURATIONS.map((duration) => (
+                  <TouchableOpacity
+                    key={duration}
+                    style={[
+                      styles.quickPresetButton,
+                      {
+                        backgroundColor: customDuration === duration
+                          ? `${COLORS.primary.light}18`
+                          : isDark ? '#2C2C2E' : '#F2F2F7',
+                        borderColor: customDuration === duration
+                          ? `${COLORS.primary.light}40`
+                          : isDark ? '#3A3A3C' : '#E5E5EA',
+                      }
+                    ]}
+                    onPress={() => {
+                      setCustomDuration(duration);
+                      setSelectedPreset(null);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                  >
+                    <Text style={[
+                      styles.quickPresetButtonText,
+                      {
+                        color: customDuration === duration
+                          ? COLORS.primary.light
+                          : isDark ? '#FFFFFF' : '#000000',
+                      }
+                    ]}>
+                      {duration}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Action Buttons */}
             <View style={styles.modalButtons}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.cancelButton, { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7' }]}
-                onPress={() => setShowCustomModal(false)}
+                onPress={() => {
+                  setShowCustomModal(false);
+                  setSelectedPreset(null);
+                }}
               >
                 <Text style={[styles.modalButtonText, { color: isDark ? '#FFFFFF' : '#000000' }]}>
                   Cancel
@@ -567,9 +850,11 @@ export default function FocusScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
-    </SafeAreaView>
+      </SafeAreaView>
+    </ScreenWrapper>
   );
 }
 
@@ -818,7 +1103,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 3,
-    backgroundColor: 'rgba(255,255,255,0.12)'
   },
   startTextWrap: {
     flexDirection: 'column',
@@ -835,7 +1119,7 @@ const styles = StyleSheet.create({
   // Modal styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -843,16 +1127,18 @@ const styles = StyleSheet.create({
     width: '85%',
     maxWidth: 350,
     padding: 24,
-    borderRadius: 20,
+    borderRadius: 24,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.35,
+    shadowRadius: 30,
+    elevation: 15,
+    borderWidth: 0.5,
+    borderColor: 'rgba(0, 0, 0, 0.08)',
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: '600',
     textAlign: 'center',
     marginBottom: 8,
   },
@@ -861,15 +1147,85 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 24,
   },
-  modalInput: {
-    fontSize: 18,
-    fontWeight: '600',
-    textAlign: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    borderWidth: 1,
+  stepperContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 20,
     marginBottom: 24,
+  },
+  stepperButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  stepperValueContainer: {
+    alignItems: 'center',
+    minWidth: 120,
+    marginTop: 16,
+  },
+  stepperValue: {
+    fontSize: 48,
+    fontWeight: '700',
+    marginBottom: 4,
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
+  },
+  stepperValueLabel: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  quickStepContainer: {
+    marginBottom: 24,
+  },
+  quickStepLabel: {
+    fontSize: 13,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  quickStepButtons: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  quickStepButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+  },
+  quickStepButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  quickPresetsContainer: {
+    marginBottom: 24,
+  },
+  quickPresetsLabel: {
+    fontSize: 13,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  quickPresetsButtons: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  quickPresetButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    borderWidth: 1.5,
+  },
+  quickPresetButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   modalButtons: {
     flexDirection: 'row',
