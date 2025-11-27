@@ -70,7 +70,7 @@ const PRIORITY_COLORS = {
 // Move styles definition to the top, after imports
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
-  mainContent: { flex: 1, padding: 20, paddingTop: 32 },
+  mainContent: { flex: 1, padding: 0, paddingTop: 32 },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -225,7 +225,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent', 
     borderRadius: 16, 
     marginBottom: 12, 
-    marginHorizontal: 4,
+    marginHorizontal: 0,
     backgroundColor: 'rgba(250, 251, 252, 0.95)', 
     borderWidth: 1,
     elevation: 2,
@@ -335,11 +335,9 @@ const styles = StyleSheet.create({
   deleteButton: {
     justifyContent: 'center',
     alignItems: 'center',
-    width: 80,
-    backgroundColor: 'rgba(255, 235, 238, 0.9)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    marginBottom: 8,
+    width: 90,
+    marginBottom: 12,
+    overflow: 'hidden',
   },
   deleteButtonTouchable: {
     justifyContent: 'center',
@@ -347,6 +345,15 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     backgroundColor: 'transparent',
+    flexDirection: 'column',
+    gap: 2,
+  },
+  deleteButtonText: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 2,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
   },
   subtaskDot: {
     width: 8,
@@ -363,33 +370,40 @@ const styles = StyleSheet.create({
   },
 });
 
-function renderRightActions(progress: any, dragX: any, onDelete: () => void) {
+function renderRightActions(progress: any, dragX: any, onDelete: () => void, isDark: boolean = false) {
   try {
-    // Smooth scale animation
+    // Advanced scale animation with elastic feel
     const scale = progress.interpolate({
-      inputRange: [0, 0.2, 1],
-      outputRange: [0.8, 1, 1],
+      inputRange: [0, 0.3, 0.6, 1],
+      outputRange: [0.7, 0.95, 1.05, 1],
       extrapolate: 'clamp',
     });
 
-    // Smooth opacity animation
+    // Smooth opacity with faster reveal
     const opacity = progress.interpolate({
-      inputRange: [0, 0.15, 1],
-      outputRange: [0, 1, 1],
+      inputRange: [0, 0.2, 1],
+      outputRange: [0, 0.95, 1],
       extrapolate: 'clamp',
     });
 
-    // Slide in animation from right
+    // Refined slide-in from right
     const translateX = progress.interpolate({
-      inputRange: [0, 0.3, 1],
-      outputRange: [80, 20, 0],
+      inputRange: [0, 0.4, 1],
+      outputRange: [50, 8, 0],
       extrapolate: 'clamp',
     });
 
-    // Border radius animation - starts rounded and becomes more rounded as it merges
+    // Dynamic border radius that merges with task item
     const borderRadius = progress.interpolate({
       inputRange: [0, 0.5, 1],
-      outputRange: [20, 12, 10],
+      outputRange: [16, 14, 12],
+      extrapolate: 'clamp',
+    });
+
+    // Icon scale animation for emphasis
+    const iconScale = progress.interpolate({
+      inputRange: [0, 0.5, 1],
+      outputRange: [0.6, 1.1, 1],
       extrapolate: 'clamp',
     });
 
@@ -397,7 +411,13 @@ function renderRightActions(progress: any, dragX: any, onDelete: () => void) {
     const scaleValue = typeof scale === 'number' ? scale : 1;
     const opacityValue = typeof opacity === 'number' ? opacity : 1;
     const translateXValue = typeof translateX === 'number' ? translateX : 0;
-    const borderRadiusValue = typeof borderRadius === 'number' ? borderRadius : 10;
+    const borderRadiusValue = typeof borderRadius === 'number' ? borderRadius : 12;
+    const iconScaleValue = typeof iconScale === 'number' ? iconScale : 1;
+
+    // Use High priority colors based on theme
+    const bgColor = isDark ? '#3a191b' : '#ffe5e7';
+    const textColor = isDark ? '#ff453a' : '#ff3b30';
+    const borderColor = isDark ? '#5c292c' : '#ffd1d4';
 
     return (
       <Animated.View
@@ -405,32 +425,44 @@ function renderRightActions(progress: any, dragX: any, onDelete: () => void) {
           styles.deleteButton,
           {
             opacity: opacityValue,
+            backgroundColor: bgColor,
             transform: [
               { scale: scaleValue },
               { translateX: translateXValue }
             ],
             borderRadius: borderRadiusValue,
+            borderWidth: 1,
+            borderColor: borderColor,
+            shadowColor: textColor,
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: opacityValue * 0.15,
+            shadowRadius: 4,
+            elevation: 2,
           }
         ]}
       >
         <TouchableOpacity
           onPress={onDelete}
-          style={[
-            styles.deleteButtonTouchable,
-            { borderRadius: borderRadiusValue }
-          ]}
+          style={styles.deleteButtonTouchable}
+          activeOpacity={0.7}
         >
-          <Ionicons name="trash" size={24} color="#d32f2f" />
+          <Animated.View style={{ transform: [{ scale: iconScaleValue }] }}>
+            <Ionicons name="trash" size={22} color={textColor} />
+          </Animated.View>
+          <Text style={[styles.deleteButtonText, { color: textColor }]}>Delete</Text>
         </TouchableOpacity>
       </Animated.View>
     );
   } catch (error) {
     console.warn('[TodoScreen] Error in renderRightActions:', error);
     // Fallback to static values
+    const bgColor = isDark ? '#3a191b' : '#ffe5e7';
+    const textColor = isDark ? '#ff453a' : '#ff3b30';
     return (
-      <Animated.View style={[styles.deleteButton, { opacity: 1, transform: [{ scale: 1 }] }]}>
+      <Animated.View style={[styles.deleteButton, { opacity: 1, transform: [{ scale: 1 }], backgroundColor: bgColor }]}>
         <TouchableOpacity onPress={onDelete} style={styles.deleteButtonTouchable}>
-          <Ionicons name="trash" size={24} color="#d32f2f" />
+          <Ionicons name="trash" size={22} color={textColor} />
+          <Text style={[styles.deleteButtonText, { color: textColor }]}>Delete</Text>
         </TouchableOpacity>
       </Animated.View>
     );
@@ -572,7 +604,7 @@ const TaskList = ({ tasks, onToggle, onEdit, onDelete }: { tasks: Task[], onTogg
         scrollEnabled={tasks.length > 1}
         renderItem={({ item }) => (
           <Swipeable
-            renderRightActions={(progress, dragX) => renderRightActions(progress, dragX, () => onDelete(item.id))}
+            renderRightActions={(progress, dragX) => renderRightActions(progress, dragX, () => onDelete(item.id), isDark)}
             overshootRight={false}
             friction={2}
             rightThreshold={40}
@@ -604,14 +636,14 @@ const TaskList = ({ tasks, onToggle, onEdit, onDelete }: { tasks: Task[], onTogg
                 <TouchableOpacity
                   style={{ flex: 1 }}
                   onLongPress={() => {
-                    console.log('Long press detected for task:', item.text);
+                    // console.log('Long press detected for task:', item.text);
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                     setLongPressedId(item.id);
                     setTimeout(() => setLongPressedId(null), 200);
                     // Use the existing onEdit function
                     onEdit(item);
                   }}
-                  delayLongPress={600}
+                  delayLongPress={300}
                   activeOpacity={1}
                 >
                   <Text style={[styles.taskText, item.completed ? styles.taskTextCompleted : null, { color: isDark ? '#fff' : '#222' }]}>{item.text}</Text>
@@ -951,7 +983,7 @@ export default function TodoScreen() {
               alignItems: 'center',
               shadowColor: isDark ? '#ffffff' : '#000000',
               shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: isDark ? 0.15 : 0.6,
+              shadowOpacity: isDark ? 0.35 : 0.6,
               shadowRadius: 6,
               elevation: 8,
               borderWidth: isDark ? 0.5 : 0,

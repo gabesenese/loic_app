@@ -1365,7 +1365,7 @@ export default function TaskModal({
                   )}
                   {/* Smart Subtask Suggestions */}
                   {smartSubtaskSuggestions.length > 0 && (
-                    <View style={styles.suggestionsContainerApple}>
+                    <View style={[styles.suggestionsContainerApple, { marginBottom: 20 }]}>
                       <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
                         <Text style={styles.suggestionsTitleApple}>
                           Suggested Subtasks
@@ -1374,14 +1374,15 @@ export default function TaskModal({
                       <ScrollView
                         horizontal
                         showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={[styles.suggestionsScrollApple, { paddingLeft: 0, paddingRight: 0 }]}
-                        style={{ width: '100%' }}
+                        contentContainerStyle={[styles.suggestionsScrollApple, { paddingLeft: 0, paddingRight: 0, paddingBottom: 20}]}
+                        style={{ width: 'auto' }}
                         keyboardShouldPersistTaps="always"
                         keyboardDismissMode="none"
                         scrollEventThrottle={16}
                         decelerationRate="fast"
                         bounces={false}
                         overScrollMode="never"
+                        scrollEnabled={true}
                       >
                         {smartSubtaskSuggestions
                           .filter(subtask => {
@@ -1944,7 +1945,8 @@ const styles = StyleSheet.create({
   // New styles for smart suggestions
   suggestionsContainer: {
     marginTop: 16,
-    paddingHorizontal: 20,
+    paddingHorizontal: "auto",
+    paddingVertical: 0,
     paddingBottom: 12,
     backgroundColor: 'transparent',
     borderRadius: 16,
@@ -1997,6 +1999,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     width: '100%',
     alignSelf: 'stretch',
+    overflow: 'visible',
   },
   suggestionsTitleApple: {
     fontSize: 13,
@@ -2013,6 +2016,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingLeft: 0,
     paddingRight: 0,
+    overflow: 'visible',
   },
   suggestionItemApple: {
     flexDirection: 'row',

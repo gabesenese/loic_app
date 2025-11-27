@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { Swipeable } from 'react-native-gesture-handler';
 
 export interface Subtask {
   id: string;
@@ -111,11 +112,10 @@ export const SubtaskItem: React.FC<SubtaskItemProps> = memo(({
   const [editText, setEditText] = useState(subtask.text);
   const [isPressed, setIsPressed] = useState(false);
   
-  const slideAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const checkboxAnim = useRef(new Animated.Value(subtask.completed ? 1 : 0)).current;
   const textOpacity = useRef(new Animated.Value(subtask.completed ? 0.6 : 1)).current;
-  const deleteSlideAnim = useRef(new Animated.Value(0)).current;
+  
 
   useEffect(() => {
     Animated.timing(checkboxAnim, {
@@ -130,6 +130,87 @@ export const SubtaskItem: React.FC<SubtaskItemProps> = memo(({
       useNativeDriver: true,
     }).start();
   }, [subtask.completed]);
+
+  // Right actions for Swipeable (shows only when swiped)
+  const renderRightActions = (progress: any, _dragX: any) => {
+    // Advanced scale animation with elastic feel
+    const scale = progress.interpolate({
+      inputRange: [0, 0.3, 0.6, 1],
+      outputRange: [0.7, 0.95, 1.05, 1],
+      extrapolate: 'clamp',
+    });
+
+    // Smooth opacity with faster reveal
+    const opacity = progress.interpolate({
+      inputRange: [0, 0.2, 1],
+      outputRange: [0, 0.95, 1],
+      extrapolate: 'clamp',
+    });
+
+    // Refined slide-in from right
+    const translateX = progress.interpolate({
+      inputRange: [0, 0.4, 1],
+      outputRange: [50, 8, 0],
+      extrapolate: 'clamp',
+    });
+
+    // Dynamic border radius that merges with task item
+    const borderRadius = progress.interpolate({
+      inputRange: [0, 0.5, 1],
+      outputRange: [16, 14, 12],
+      extrapolate: 'clamp',
+    });
+
+    // Icon scale animation for emphasis
+    const iconScale = progress.interpolate({
+      inputRange: [0, 0.5, 1],
+      outputRange: [0.6, 1.1, 1],
+      extrapolate: 'clamp',
+    });
+
+    // Use High priority colors based on theme
+    const bgColor = isDark ? '#3a191b' : '#ffe5e7';
+    const textColor = isDark ? '#ff453a' : '#ff3b30';
+    const borderColor = isDark ? '#5c292c' : '#ffd1d4';
+
+    return (
+      <Animated.View
+        style={[
+          styles.swipeDeleteButton,
+          {
+            opacity,
+            backgroundColor: bgColor,
+            transform: [
+              { scale },
+              { translateX }
+            ],
+            borderRadius,
+            borderWidth: 1,
+            borderColor: borderColor,
+            shadowColor: textColor,
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: 0.15,
+            shadowRadius: 4,
+            elevation: 2,
+          }
+        ]}
+      >
+        <TouchableOpacity
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            onDelete(subtask.id);
+          }}
+          style={styles.swipeDeleteTouchable}
+          activeOpacity={0.7}
+        >
+          <Animated.View style={{ transform: [{ scale: iconScale }] }}>
+            <Ionicons name="trash" size={22} color={textColor} />
+          </Animated.View>
+          <Text style={[styles.deleteButtonText, { color: textColor }]}>Delete</Text>
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  };
 
   const handlePressIn = () => {
     setIsPressed(true);
@@ -163,16 +244,7 @@ export const SubtaskItem: React.FC<SubtaskItemProps> = memo(({
     }
   };
 
-  const handleDelete = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Animated.timing(deleteSlideAnim, {
-      toValue: -Dimensions.get('window').width,
-      duration: 300,
-      useNativeDriver: true,
-    }).start(() => {
-      onDelete(subtask.id);
-    });
-  };
+  // Deletion handled from Swipeable right action
 
   const checkboxColor = checkboxAnim.interpolate({
     inputRange: [0, 1],
@@ -185,42 +257,49 @@ export const SubtaskItem: React.FC<SubtaskItemProps> = memo(({
   });
 
   return (
-    <Animated.View
-      style={[
-        styles.container,
-        {
-          backgroundColor: isDark ? '#1c1c1e' : '#f8f9fa',
-          borderColor: isDark ? '#333' : '#e0e0e0',
-          transform: [{ translateX: deleteSlideAnim }, { scale: scaleAnim }],
-        },
-      ]}
+    <Swipeable
+      renderRightActions={renderRightActions}
+      overshootRight={false}
+      friction={2}
+      rightThreshold={40}
+      enabled={!isEditing}
     >
-      <TouchableOpacity
-        onPress={handleToggle}
-        onPressIn={() => {
-          Keyboard.dismiss();
-          handlePressIn();
-        }}
-        onPressOut={handlePressOut}
-        style={styles.checkboxContainer}
-        activeOpacity={0.7}
+      <Animated.View
+        style={[
+          styles.container,
+          {
+            backgroundColor: isDark ? '#1c1c1e' : '#f8f9fa',
+            borderColor: isDark ? '#333' : '#e0e0e0',
+            transform: [{ scale: scaleAnim }],
+          },
+        ]}
       >
-        <Animated.View
-          style={[
-            styles.checkbox,
-            {
-              backgroundColor: checkboxColor,
-              borderColor: checkboxColor,
-            },
-          ]}
+        <TouchableOpacity
+          onPress={handleToggle}
+          onPressIn={() => {
+            Keyboard.dismiss();
+            handlePressIn();
+          }}
+          onPressOut={handlePressOut}
+          style={styles.checkboxContainer}
+          activeOpacity={0.7}
         >
-          <Animated.View style={{ opacity: checkmarkOpacity }}>
-            <Ionicons name="checkmark" size={14} color="white" />
+          <Animated.View
+            style={[
+              styles.checkbox,
+              {
+                backgroundColor: checkboxColor,
+                borderColor: checkboxColor,
+              },
+            ]}
+          >
+            <Animated.View style={{ opacity: checkmarkOpacity }}>
+              <Ionicons name="checkmark" size={14} color="white" />
+            </Animated.View>
           </Animated.View>
-        </Animated.View>
-      </TouchableOpacity>
+        </TouchableOpacity>
 
-      <View style={styles.contentContainer}>
+        <View style={styles.contentContainer}>
         {isEditing ? (
           <TextInput
             style={[
@@ -272,25 +351,18 @@ export const SubtaskItem: React.FC<SubtaskItemProps> = memo(({
           onPressIn={() => {
             Keyboard.dismiss();
           }}
-          style={[
-            styles.actionButton,
-            { 
-              backgroundColor: isDark 
-                ? 'rgba(10, 132, 255, 0.15)' 
-                : 'rgba(0, 122, 255, 0.1)',
-              borderWidth: 1,
-              borderColor: isDark ? '#0A84FF' : '#007AFF',
-            },
-          ]}
+          style={styles.actionButton}
+          activeOpacity={0.6}
         >
           <Ionicons 
             name={isEditing ? "checkmark" : "pencil"} 
-            size={14} 
-            color={isDark ? '#0A84FF' : '#007AFF'}
+            size={16} 
+            color={isDark ? '#A5A5A5' : '#8E8E93'}
           />
         </TouchableOpacity>
       </View>
-    </Animated.View>
+      </Animated.View>
+    </Swipeable>
   );
 });
 
@@ -399,6 +471,7 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
     minHeight: 56,
+    zIndex: 2,
   },
   checkboxContainer: {
     marginRight: 12,
@@ -416,6 +489,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
     justifyContent: 'center',
     paddingVertical: 2,
+    height: 'auto',
   },
   subtaskText: {
     fontSize: 16,
@@ -437,9 +511,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   actionButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    padding: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -472,4 +544,35 @@ const styles = StyleSheet.create({
   subtasksList: {
     marginBottom: 16,
   },
-}); 
+  deleteButton: {
+    // no-op: legacy background removed in favor of Swipeable actions
+    display: 'none',
+  },
+  swipeDeleteButton: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+    backgroundColor: 'rgba(255, 235, 238, 0.9)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 12,
+    marginVertical: 8,
+    minHeight: 56,
+  },
+  swipeDeleteTouchable: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'transparent',
+    flexDirection: 'column',
+    gap: 2,
+  },
+  deleteButtonText: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 2,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+});
