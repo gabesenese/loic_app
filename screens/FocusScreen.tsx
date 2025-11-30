@@ -620,7 +620,7 @@ export default function FocusScreen() {
                     },
                   ]}
                 >
-                  <Ionicons name={mode.icon as any} size={22} color={mode.color} />
+                  <Ionicons name={mode.icon as keyof typeof Ionicons.glyphMap} size={22} color={mode.color} />
                 </View>
                 <Text style={[
                   styles.modeName,

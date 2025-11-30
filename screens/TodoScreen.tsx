@@ -370,7 +370,7 @@ const styles = StyleSheet.create({
   },
 });
 
-function renderRightActions(progress: any, dragX: any, onDelete: () => void, isDark: boolean = false) {
+function renderRightActions(progress: Animated.AnimatedInterpolation<number>, dragX: Animated.AnimatedInterpolation<number>, onDelete: () => void, isDark: boolean = false) {
   try {
     // Advanced scale animation with elastic feel
     const scale = progress.interpolate({
@@ -814,7 +814,7 @@ const SettingsModal = ({ visible, onClose }: { visible: boolean, onClose: () => 
 
 export default function TodoScreen() {
   const route = useRoute();
-  const focusView = (route.params as any)?.focusView ?? 'all';
+  const focusView = ((route.params as { focusView?: string })?.focusView) ?? 'all';
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const [addModalVisible, setAddModalVisible] = useState(false);
@@ -871,11 +871,24 @@ export default function TodoScreen() {
         }
       }
     })();
-    return () => { mounted = false; };
+    return () => { 
+      mounted = false; 
+    };
   }, []);
 
+  // Debounce AsyncStorage writes to improve performance
   useEffect(() => {
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+    if (tasks.length === 0) return; // Don't save empty array on initial load
+    
+    const timeoutId = setTimeout(() => {
+      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(tasks)).catch((err) => {
+        console.warn('Failed to save tasks', err);
+      });
+    }, 500); // 500ms debounce delay
+    
+    return () => {
+      clearTimeout(timeoutId);
+    };
   }, [tasks]);
 
   useEffect(() => {

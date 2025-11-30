@@ -22,7 +22,7 @@ function ScreenWrapper({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-let BlurView: any = null;
+let BlurView: React.ComponentType<any> | null = null;
 try {
   BlurView = require('expo-blur').BlurView;
 } catch {}
@@ -61,7 +61,7 @@ const SettingsRow = ({
     disabled={!onPress}
   >
     <View style={[styles.iconContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}>
-      <Ionicons name={icon as any} size={20} color={isDark ? '#ffffff' : '#000000'} />
+      <Ionicons name={icon as keyof typeof Ionicons.glyphMap} size={20} color={isDark ? '#ffffff' : '#000000'} />
     </View>
     <View style={styles.textContainer}>
       <Text style={[styles.rowTitle, { color: isDark ? '#ffffff' : '#000000' }]}>{title}</Text>
@@ -127,22 +127,39 @@ export default function SettingsScreen() {
         console.warn('Failed to load settings', err);
       }
     })();
-    return () => { mounted = false; };
+    return () => { 
+      mounted = false; 
+    };
   }, []);
 
-  // Save settings to storage
+  // Debounce AsyncStorage writes to improve performance
   useEffect(() => {
     if (typeof notificationsEnabled === 'boolean') {
-      AsyncStorage.setItem(NOTIFICATIONS_KEY, notificationsEnabled ? 'true' : 'false');
+      const timeoutId = setTimeout(() => {
+        AsyncStorage.setItem(NOTIFICATIONS_KEY, notificationsEnabled ? 'true' : 'false').catch((err) => {
+          console.warn('Failed to save notifications setting', err);
+        });
+      }, 300);
+      return () => clearTimeout(timeoutId);
     }
   }, [notificationsEnabled]);
 
   useEffect(() => {
-    AsyncStorage.setItem(AUTO_ARCHIVE_KEY, autoArchive ? 'true' : 'false');
+    const timeoutId = setTimeout(() => {
+      AsyncStorage.setItem(AUTO_ARCHIVE_KEY, autoArchive ? 'true' : 'false').catch((err) => {
+        console.warn('Failed to save auto archive setting', err);
+      });
+    }, 300);
+    return () => clearTimeout(timeoutId);
   }, [autoArchive]);
 
   useEffect(() => {
-    AsyncStorage.setItem(ARCHIVE_DAYS_KEY, archiveDays.toString());
+    const timeoutId = setTimeout(() => {
+      AsyncStorage.setItem(ARCHIVE_DAYS_KEY, archiveDays.toString()).catch((err) => {
+        console.warn('Failed to save archive days setting', err);
+      });
+    }, 300);
+    return () => clearTimeout(timeoutId);
   }, [archiveDays]);
 
   // Handle archive days input changes
