@@ -1181,7 +1181,12 @@ export default function TaskModal({
                     borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
                   },
                 ]}
-                onPress={onClose}
+                onPress={async () => {
+                  try {
+                    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  } catch (e) {}
+                  onClose();
+                }}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
                 <Ionicons name="close" size={24} color={isDark ? "#ffffff" : "#000000"} />
@@ -1707,7 +1712,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "flex-end",
     alignItems: "stretch",
-    backgroundColor: "transparent",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
   },
   bottomSheet: {
     width: "100%",

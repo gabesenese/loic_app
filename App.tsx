@@ -36,9 +36,9 @@ function AnimatedTabIcon({ iconName, color, size, focused }: { iconName: string;
   return (
     <Animated.View style={{ transform: [{ scale }] }}>
       <Ionicons name={iconName as any} size={size + 4} color={color} style={{
-        textShadowColor: focused ? color : 'transparent',
+        textShadowColor: 'transparent',
         textShadowOffset: { width: 0, height: 0 },
-        textShadowRadius: focused ? 2 : 0,
+        textShadowRadius: 0,
       }} />
     </Animated.View>
   );
